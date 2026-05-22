@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "265175123695",
+    "project_id": "wisebite-10665",
+    "storage_bucket": "wisebite-10665.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265175123695:android:6677096f0c0b924c5dbd1a",
+        "android_client_info": {
+          "package_name": "com.example.wisebite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnlLT_XVjaPzgvfXTWKHzkhtoLIkeSML8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
