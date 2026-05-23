@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/firebase_provider.dart';
+import 'ai_chat_dialog.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -92,6 +93,35 @@ class DashboardView extends StatelessWidget {
                   ElevatedButton.icon(
                     onPressed: () {
                       // 串接打開 AI Chat 彈窗
+                      showGeneralDialog(
+                        context: context,
+                        barrierDismissible: true, // 點擊遮罩是否可關閉
+                        barrierLabel: "AIChatDialog",
+                        barrierColor: Colors.transparent, // 遮罩顏色由 AIChatDialog 內部處理
+                        transitionDuration: const Duration(milliseconds: 300),
+                        pageBuilder: (context, animation, secondaryAnimation) {
+                          return AIChatDialog(
+                            onClose: () => Navigator.of(context).pop(), // 關閉彈窗
+                            onUpdateRequirement: (req) {
+                              // 在這裡處理 AI 回傳的新需求更新（例如：setState 或觸發 Provider/Bloc）
+                              print("Requirement updated!");
+                            },
+                          );
+                        },
+                        transitionBuilder: (context, animation, secondaryAnimation, child) {
+                          // 加上經典的右側滑入 (Slide) 與淡入 (Fade) 效果，完美對應 Desktop 側邊欄感覺
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(1, 0), // 從右側螢幕外滑入
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                            child: FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            ),
+                          );
+                        },
+                      );
                     },
                     icon: const Icon(Icons.auto_awesome, size: 14),
                     label: const Text('OPTIMIZE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
