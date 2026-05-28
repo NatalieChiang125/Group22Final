@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/firebase_provider.dart';
+import 'restaurant_detail.dart';
 import 'ai_chat_dialog.dart';
 
 class DashboardView extends StatelessWidget {
@@ -197,22 +198,36 @@ class DashboardView extends StatelessWidget {
 
               // 這裡先放置模擬的 WiseCard 組件
               _buildMockWiseCard(
-                name: '健康滿點輕食沙拉屋',
-                score: 95,
-                reason: '高纖低脂，完美符合您今日剩餘的碳水與脂肪配額！',
-                price: '\$',
-                distance: '0.4km',
-                tags: ['低卡', '校園特約'],
+                context: context,
+                restaurant: Restaurant(
+                  name: '健康滿點輕食沙拉屋',
+                  image:
+                      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd',
+                  rating: 4.8,
+                  priceRange: '\$',
+                  deliveryTime: '0.4km',
+                  wiseScore: 95,
+                  wiseReason: '高纖低脂，完美符合您今日剩餘的碳水與脂肪配額！',
+                  nutritionalHighlights: ['低卡', '高纖', '校園特約'],
+                  categories: ['健康低卡', '沙拉', '輕食'],
+                ),
                 isTopPick: true,
               ),
               const SizedBox(height: 12),
               _buildMockWiseCard(
-                name: '學長姐推薦高蛋白廚房',
-                score: 89,
-                reason: '店內雞胸肉便當蛋白質含量高達 45g，適合重訓後的你。',
-                price: '\$\$',
-                distance: '0.8km',
-                tags: ['高蛋白', '小資首選'],
+                context: context,
+                restaurant: Restaurant(
+                  name: '學長姐推薦高蛋白廚房',
+                  image:
+                      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+                  rating: 4.6,
+                  priceRange: '\$\$',
+                  deliveryTime: '0.8km',
+                  wiseScore: 89,
+                  wiseReason: '店內雞胸肉便當蛋白質含量高達 45g，適合重訓後的你。',
+                  nutritionalHighlights: ['高蛋白', '小資首選'],
+                  categories: ['高蛋白', '便當', '健康餐'],
+                ),
                 isTopPick: false,
               ),
             ],
@@ -420,150 +435,169 @@ class DashboardView extends StatelessWidget {
 
   // --- 內部組件：模擬還原精緻的 WiseCard 餐廳卡片 ---
   Widget _buildMockWiseCard({
-    required String name,
-    required int score,
-    required String reason,
-    required String price,
-    required String distance,
-    required List<String> tags,
+    required BuildContext context,
+    required Restaurant restaurant,
     required bool isTopPick,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: isTopPick
-              ? Colors.green.withOpacity(0.3)
-              : Colors.grey.shade100,
-          width: isTopPick ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return GestureDetector(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) {
+            return RestaurantDetail(
+              restaurant: restaurant,
+              onClose: () => Navigator.of(context).pop(),
+            );
+          },
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: isTopPick
+                ? Colors.green.withOpacity(0.3)
+                : Colors.grey.shade100,
+            width: isTopPick ? 1.5 : 1,
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isTopPick)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-              color: Colors.green.withOpacity(0.08),
-              child: const Row(
-                children: [
-                  Icon(Icons.star, color: Colors.green, size: 14),
-                  SizedBox(width: 6),
-                  Text(
-                    'WISE BEST PICK ── 最符合今日目標',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isTopPick)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 6,
+                  horizontal: 16,
+                ),
+                color: Colors.green.withOpacity(0.08),
+                child: const Row(
                   children: [
+                    Icon(Icons.star, color: Colors.green, size: 14),
+                    SizedBox(width: 6),
                     Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
+                      'WISE BEST PICK ── 最符合今日目標',
+                      style: TextStyle(
                         color: Colors.green,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$score 分',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      price,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.circle, size: 4, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Text(
-                      distance,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(
-                        Icons.tips_and_updates,
-                        color: Colors.orange,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          reason,
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontSize: 13,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500,
+                          restaurant.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${restaurant.wiseScore} 分',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        restaurant.priceRange,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.circle, size: 4, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Text(
+                        restaurant.deliveryTime,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.tips_and_updates,
+                          color: Colors.orange,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            restaurant.wiseReason,
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontSize: 13,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -5,7 +5,8 @@ import '../widgets/wise_navbar.dart';
 import 'dashboard_view.dart';
 import 'budget_view.dart';
 import 'analysis_view.dart';
-import 'profile_social_view.dart';
+import 'profile_view.dart';
+import 'social_view.dart';
 import 'settings_sidebar.dart';
 
 class MainLayout extends StatefulWidget {
@@ -171,9 +172,10 @@ class _MainLayoutState extends State<MainLayout> {
   // 💡 4. 將原本的 SizedBox 或是舊首頁佔位，正式替換成儲存空間（SizedBox 保持彈性注入）
   final List<Widget> _staticPages = [
     const DashboardView(),
-    const SizedBox(), // 佔位：Index 1 -> BudgetView
-    const SizedBox(), // 💡 佔位：Index 2 -> AnalysisView
-    const SizedBox(), // 佔位：Index 3 -> ProfileSocialView
+    const SizedBox(), // Index 1 -> BudgetView
+    const SizedBox(), // Index 2 -> AnalysisView
+    const SizedBox(), // Index 3 -> SocialView
+    const SizedBox(), // Index 4 -> ProfileView
   ];
 
   // 🛠️ 5. 回歸單純的分頁切換邏輯，移除了舊有的 _openAIChatDialog() 特例
@@ -279,13 +281,14 @@ class _MainLayoutState extends State<MainLayout> {
     );
 
     // 注入社交排行視圖
-    displayPages[3] = ProfileSocialView(
+    displayPages[3] = SocialView(
       userShareId: _myShareId,
       friends: _friendsList,
       userScore: _myScore,
       userStreak: _myStreak,
       onAddFriend: _handleOnAddFriend,
     );
+    displayPages[4] = ProfileView(records: _mealRecords);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -293,7 +296,7 @@ class _MainLayoutState extends State<MainLayout> {
       appBar: WiseNavbar(
         onSettingsClick: () => _scaffoldKey.currentState
             ?.openEndDrawer(), //右邊彈出  //print('Open Settings Sidebar'),
-        onProfileClick: () => setState(() => _currentIndex = 3),
+        onProfileClick: () => setState(() => _currentIndex = 4),
       ),
       endDrawer: SettingsSidebar(
         currentPriorities: userPriorities,

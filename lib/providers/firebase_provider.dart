@@ -54,61 +54,132 @@ class FirebaseProvider with ChangeNotifier {
 
     // 監聽 User Profile
     final userRef = _db.collection('users').doc(uid);
-    _profileSubscription = userRef.snapshots().listen((docSnap) async {
-      if (docSnap.exists) {
-        _userProfileJson = docSnap.data();
-      } else {
-        // 如果使用者第一次登入，初始化 Profile (對應網頁版 initialProfile)
-        final initialProfile = {
-          'displayName': _user?.displayName ?? 'Wise User',
-          'photoURL': _user?.photoURL ?? '',
-          'shareId': 'WISE_${uid.substring(0, 5).toUpperCase()}',
-          'friends': [],
-          'stats': {
-            'goals': {'calories': 2000, 'protein': 120, 'carbs': 240, 'fat': 65, 'fiber': 30, 'fruit': 2},
-            'current': {'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 10, 'fiber': 0, 'fruit': 0},
-            'remaining': {'calories': 2000, 'protein': 120, 'carbs': 240, 'fat': 65, 'fiber': 30, 'fruit': 2}
-          },
-          'preferences': {
-            'allergies': [],
-            'eatBreakfast': true,
-            'priorityOrder': ['health', 'distance', 'price', 'rating'],
-            'dietaryPreference': ['Balanced']
-          },
-          'budget': {
-            'monthlyLimit': 15000,
-            'history': []
-          },
-          'createdAt': FieldValue.serverTimestamp()
-        };
-        try {
-          await userRef.set(initialProfile);
-        } catch (err) {
-          _firebaseService.handleFirestoreError(err, OperationType.write, 'users/$uid');
+    _profileSubscription = userRef.snapshots().listen(
+      (docSnap) async {
+        if (docSnap.exists) {
+          _userProfileJson = docSnap.data();
+        } else {
+          // 如果使用者第一次登入，初始化 Profile (對應網頁版 initialProfile)
+          final initialProfile = {
+            'displayName': _user?.displayName ?? 'Wise User',
+            'photoURL': _user?.photoURL ?? '',
+            'shareId': 'WISE_${uid.substring(0, 5).toUpperCase()}',
+            'friends': [],
+            'stats': {
+              'goals': {
+                'calories': 2000,
+                'protein': 120,
+                'carbs': 240,
+                'fat': 65,
+                'fiber': 30,
+                'fruit': 2,
+              },
+              'current': {
+                'calories': 0,
+                'protein': 0,
+                'carbs': 0,
+                'fat': 10,
+                'fiber': 0,
+                'fruit': 0,
+              },
+              'remaining': {
+                'calories': 2000,
+                'protein': 120,
+                'carbs': 240,
+                'fat': 65,
+                'fiber': 30,
+                'fruit': 2,
+              },
+            },
+            'preferences': {
+              'allergies': [],
+              'eatBreakfast': true,
+              'priorityOrder': ['health', 'distance', 'price', 'rating'],
+              'dietaryPreference': ['Balanced'],
+            },
+            'budget': {'monthlyLimit': 15000, 'history': []},
+            'createdAt': FieldValue.serverTimestamp(),
+          };
+          try {
+            await userRef.set(initialProfile);
+          } catch (err) {
+            _firebaseService.handleFirestoreError(
+              err,
+              OperationType.write,
+              'users/$uid',
+            );
+          }
         }
-      }
-      notifyListeners();
-    }, onError: (err) {
-      _firebaseService.handleFirestoreError(err, OperationType.get, 'users/$uid');
-    });
+        notifyListeners();
+      },
+      onError: (err) {
+        _firebaseService.handleFirestoreError(
+          err,
+          OperationType.get,
+          'users/$uid',
+        );
+      },
+    );
 
     // 監聽 飲食紀錄子集合 (records) 並依時間戳排序
     final recordsRef = _db.collection('users').doc(uid).collection('records');
-    _recordsSubscription = recordsRef.orderBy('timestamp', descending: true).snapshots().listen((querySnap) {
-      _records = querySnap.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id; // 把 document ID 塞進 map 裡
-        return MealRecord.fromJson(data);
-      }).toList();
-      
-      _loading = false;
-      notifyListeners();
-    }, onError: (err) {
-      _firebaseService.handleFirestoreError(err, OperationType.get, 'users/$uid/records');
-    });
+    _recordsSubscription = recordsRef
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen(
+          (querySnap) {
+            _records = querySnap.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id; // 把 document ID 塞進 map 裡
+              return MealRecord.fromJson(data);
+            }).toList();
+
+            _loading = false;
+            notifyListeners();
+          },
+          onError: (err) {
+            _firebaseService.handleFirestoreError(
+              err,
+              OperationType.get,
+              'users/$uid/records',
+            );
+          },
+        );
   }
 
   // 3. 實作各式各樣的資料操作方法 (Methods)
+  Future<void> loginWithGoogle() async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      await _firebaseService.loginWithGoogle();
+    } catch (e) {
+      print("Provider login failed: $e");
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> logout() async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      await _firebaseService.logout();
+
+      _user = null;
+      _userProfileJson = null;
+      _records = [];
+      _cancelDataSubscriptions();
+    } catch (e) {
+      print("Provider logout failed: $e");
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
 
   // 新增紀錄
   Future<void> addMealRecord(Map<String, dynamic> recordJson) async {
@@ -118,7 +189,11 @@ class FirebaseProvider with ChangeNotifier {
       if (!recordJson.containsKey('timestamp')) {
         recordJson['timestamp'] = DateTime.now().millisecondsSinceEpoch;
       }
-      await _db.collection('users').doc(_user!.uid).collection('records').add(recordJson);
+      await _db
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('records')
+          .add(recordJson);
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.create, path);
     }
@@ -151,9 +226,10 @@ class FirebaseProvider with ChangeNotifier {
     if (_user == null) return;
     final path = 'users/${_user!.uid}';
     try {
-      final currentPrefs = _userProfileJson?['preferences'] as Map<String, dynamic>? ?? {};
+      final currentPrefs =
+          _userProfileJson?['preferences'] as Map<String, dynamic>? ?? {};
       await _db.doc(path).update({
-        'preferences': {...currentPrefs, ...prefsUpdates}
+        'preferences': {...currentPrefs, ...prefsUpdates},
       });
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.update, path);
@@ -165,9 +241,10 @@ class FirebaseProvider with ChangeNotifier {
     if (_user == null) return;
     final path = 'users/${_user!.uid}';
     try {
-      final currentBudget = _userProfileJson?['budget'] as Map<String, dynamic>? ?? {};
+      final currentBudget =
+          _userProfileJson?['budget'] as Map<String, dynamic>? ?? {};
       await _db.doc(path).update({
-        'budget': {...currentBudget, ...budgetUpdates}
+        'budget': {...currentBudget, ...budgetUpdates},
       });
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.update, path);
@@ -179,9 +256,7 @@ class FirebaseProvider with ChangeNotifier {
     if (_user == null) return;
     final path = 'users/${_user!.uid}';
     try {
-      await _db.doc(path).update({
-        'stats.goals': goals.toJson()
-      });
+      await _db.doc(path).update({'stats.goals': goals.toJson()});
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.update, path);
     }
