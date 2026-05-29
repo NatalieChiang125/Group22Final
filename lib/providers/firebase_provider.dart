@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/types.dart';
 import '../services/firebase_service.dart';
+import '../models/mock_data.dart'; // 引入靜態資料池
 
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -260,6 +261,37 @@ class FirebaseProvider with ChangeNotifier {
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.update, path);
     }
+  }
+
+  List<Restaurant> getSmartRecommendations(
+    double todaySpend,
+    double dailyBudget,
+  ) {
+    // 引入剛才建立的靜態資料池
+    final List<Restaurant> allRestaurants = List<Restaurant>.from(
+      restaurantsData,
+    );
+
+    // 判斷是否已經超支
+    final bool isOverBudget = todaySpend > dailyBudget;
+
+    if (isOverBudget) {
+      // 💡 情境 A：超支了！將「預算救星/便利超商/\$ 價格區間」的餐廳權重拉高，並排在前面
+      allRestaurants.sort((a, b) {
+        final bool aIsSavings =
+            a.nutritionalHighlights?.contains('預算救星') ?? false;
+        final bool bIsSavings =
+            b.nutritionalHighlights?.contains('預算救星') ?? false;
+        if (aIsSavings && !bIsSavings) return -1;
+        if (!aIsSavings && bIsSavings) return 1;
+        return (b.wiseScore).compareTo(a.wiseScore); // 其餘按分數排
+      });
+    } else {
+      // 💡 情境 B：預算安全！優先推薦「WiseScore 最高、營養亮點豐富」的高品質健康餐盒
+      allRestaurants.sort((a, b) => (b.wiseScore).compareTo(a.wiseScore));
+    }
+
+    return allRestaurants;
   }
 
   // 輔助方法：登出或切換使用者時清空監聽器

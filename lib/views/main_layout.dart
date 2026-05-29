@@ -8,6 +8,7 @@ import 'analysis_view.dart';
 import 'profile_view.dart';
 import 'social_view.dart';
 import 'settings_sidebar.dart';
+import 'record_meal_dialog.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -209,25 +210,9 @@ class _MainLayoutState extends State<MainLayout> {
   void _openRecordDialog() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        height: 200,
-        child: Center(
-          child: ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _currentSpending += 250.0;
-                _myScore = (_myScore + 2).clamp(0, 100);
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('模擬健康記帳 (測試預算與社群狀態連動)'),
-          ),
-        ),
-      ),
+      backgroundColor: Colors.transparent, // 讓自訂的圓角 Container 得以呈現
+      isScrollControlled: true, // 允許高度根據內容彈性自適應
+      builder: (context) => const RecordMealDialog(),
     );
   }
 

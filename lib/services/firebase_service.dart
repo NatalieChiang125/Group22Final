@@ -97,4 +97,50 @@ class FirebaseService {
       }
     }
   }
+
+  Future<void> saveMealRecord({
+    required String name,
+    required double? cost,
+    required int healthScore,
+    required double calories,
+    required double protein,
+    required double carbs,
+    required double fat,
+    String? imageUrl,
+  }) async {
+    try {
+      final userId = currentUser?.uid ?? 'anonymous_user'; // 優先抓取登入者的 UID
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      // 建立 Firestore 文件參照 (自動生成隨機 Document ID)
+      final docRef = _db
+          .collection('users')
+          .doc(userId)
+          .collection('meal_records')
+          .doc();
+
+      await docRef.set({
+        'id': docRef.id,
+        'timestamp': timestamp,
+        'name': name,
+        'cost': cost,
+        'healthScore': healthScore,
+        'image': imageUrl ?? '',
+        'nutrients': {
+          'calories': calories,
+          'protein': protein,
+          'carbs': carbs,
+          'fat': fat,
+        },
+      });
+      print("餐點成功上傳至 Firestore! DocID: ${docRef.id}");
+    } catch (e) {
+      // 運用你原本寫好的精美錯誤處理機制
+      handleFirestoreError(
+        e,
+        OperationType.create,
+        'users/$currentUser/meal_records',
+      );
+    }
+  }
 }

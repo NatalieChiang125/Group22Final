@@ -1,34 +1,13 @@
+// lib/views/restaurant_detail.dart
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-class Restaurant {
-  final String name;
-  final String image;
-  final double rating;
-  final String priceRange;
-  final String deliveryTime;
-  final int wiseScore;
-  final String wiseReason;
-  final List<String> nutritionalHighlights;
-  final String? menuUrl;
-  final List<String> categories;
-
-  Restaurant({
-    required this.name,
-    required this.image,
-    required this.rating,
-    required this.priceRange,
-    required this.deliveryTime,
-    required this.wiseScore,
-    required this.wiseReason,
-    required this.nutritionalHighlights,
-    required this.categories,
-    this.menuUrl,
-  });
-}
+// 💡 優化：移除本地重複定義的 Restaurant Class，統一引入全域型態
+import 'package:wisebite/models/types.dart';
 
 class RestaurantDetail extends StatefulWidget {
-  final Restaurant? restaurant;
+  // 💡 這裡的 Restaurant 將直接對齊 mock_data.dart 與 types.dart 的完整結構
+  final dynamic restaurant;
   final VoidCallback onClose;
 
   const RestaurantDetail({
@@ -42,716 +21,550 @@ class RestaurantDetail extends StatefulWidget {
 }
 
 class _RestaurantDetailState extends State<RestaurantDetail> {
-  String activeTab = 'ai';
+  String _activeTab = 'ai'; // 'ai' | 'menu'
 
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
-
+  Future<void> _openUrl(String? urlString) async {
+    if (urlString == null || urlString.isEmpty) return;
+    final uri = Uri.parse(urlString);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch $url');
+      debugPrint("Could not launch $urlString");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final restaurant = widget.restaurant;
+    final rest = widget.restaurant;
+    if (rest == null) return const SizedBox.shrink();
 
-    if (restaurant == null) {
-      return const SizedBox.shrink();
-    }
+    // 安全取得 mock 資料中的 warnings 與 menuPhotos 欄位
+    final List<String> highlights = List<String>.from(
+      rest.nutritionalHighlights ?? [],
+    );
+    final List<String> warnings =
+        rest.runtimeType.toString().contains('Restaurant') &&
+            rest.warnings != null
+        ? List<String>.from(rest.warnings)
+        : [];
+    final List<String> categories = List<String>.from(rest.categories ?? []);
 
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: widget.onClose,
-          child: Container(color: Colors.black.withOpacity(0.55)),
-        ),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // 滾動內容區
+          CustomScrollView(
+            slivers: [
+              // 頂部餐廳大圖與毛玻璃遮罩
+              SliverAppBar(
+                expandedHeight: 240,
+                automaticallyImplyLeading: false,
+                backgroundColor: Colors.white,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        rest.image ??
+                            'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4',
+                        fit: BoxFit.cover,
+                      ),
+                      // 頂部漸層陰影，確保關閉按鈕清晰
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.4),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.9,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(42)),
+              // 餐廳基本資料與標籤
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 分類小標籤列
+                      Row(
+                        children: categories
+                            .map(
+                              (cat) => Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  cat,
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 餐廳名稱與評分
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              rest.name ?? 'Unknown Restaurant',
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                color: Colors.amber,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${rest.rating ?? 0.0}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 外送時間與價格區間
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            color: Colors.grey.shade500,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${rest.deliveryTime ?? "20 min"} • 外送限額 ${rest.priceRange ?? "\$\$"}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.location_on_outlined,
+                            color: Colors.grey.shade500,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            rest.runtimeType.toString().contains('Restaurant')
+                                ? '${rest.distance}'
+                                : '0.5km',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 精緻分頁切換按鈕 (AI 智慧分析 vs 精選菜單)
+                      Row(
+                        children: [
+                          _buildTabButton('ai', '✨ AI 智慧分析'),
+                          const SizedBox(width: 12),
+                          _buildTabButton('menu', '📋 精選菜單'),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 分頁內容渲染
+                      _activeTab == 'ai'
+                          ? _buildAiInsightSection(rest, highlights, warnings)
+                          : _buildMenuSection(rest),
+
+                      const SizedBox(height: 100), // 留白給底部懸浮按鈕
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // 頂部絕對定位的關閉按鈕
+          Positioned(
+            top: 16,
+            right: 16,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  color: Colors.black.withOpacity(0.3),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    onPressed: widget.onClose,
+                  ),
+                ),
+              ),
             ),
-            child: Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: SingleChildScrollView(
+          ),
+
+          // 底部固定懸浮導航按鈕
+          Positioned(
+            bottom: 24,
+            left: 24,
+            right: 24,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6C63FF).withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => _openUrl(rest.menuUrl),
+                icon: const Icon(Icons.navigation_rounded, color: Colors.white),
+                label: const Text(
+                  '開始地圖導航 / 查看原文選單',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Tab 按鈕組件
+  Widget _buildTabButton(String tabKey, String label) {
+    final bool isActive = _activeTab == tabKey;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _activeTab = tabKey),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF0F172A) : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? Colors.white : Colors.grey.shade600,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // AI 智慧分析分頁
+  Widget _buildAiInsightSection(
+    dynamic rest,
+    List<String> highlights,
+    List<String> warnings,
+  ) {
+    final int score = rest.wiseScore ?? 0;
+    Color scoreColor = Colors.green;
+    if (score < 60)
+      scoreColor = Colors.red;
+    else if (score < 80)
+      scoreColor = Colors.orange;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // WiseBite 智慧評分健康卡片
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: scoreColor.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: scoreColor.withOpacity(0.15), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scoreColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$score',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'WiseBite 推薦指數',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '此評分結合了你今日的剩餘預算目標與當前所需的蛋白質缺口計算。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // AI 建議詳情理由
+        const Text(
+          'AI 推薦觀點',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          rest.wiseReason ?? '暫無 AI 分析推薦理由。',
+          style: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF475569),
+            height: 1.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // 營養成分亮點與紅字警告
+        if (highlights.isNotEmpty) ...[
+          const Text(
+            '💪 營養素亮點',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: highlights
+                .map(
+                  (h) => Chip(
+                    label: Text(
+                      h,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF047857),
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFD1FAE5),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        if (warnings.isNotEmpty) ...[
+          const Text(
+            '⚠️ 飲食風險提醒',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: warnings
+                .map(
+                  (w) => Chip(
+                    label: Text(
+                      w,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFFEE2E2),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // 精選選單分頁
+  Widget _buildMenuSection(dynamic rest) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.restaurant_menu, size: 18, color: Color(0xFF0F172A)),
+            SizedBox(width: 6),
+            Text(
+              '當季熱門推薦品項',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // 渲染精選餐點卡片 (優化列表)
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 3, // 預設展示 3 筆 Mock 精選
+          itemBuilder: (context, index) {
+            final mockItemNames = ['精準高蛋白低卡便當', '地中海舒肥雞胸沙拉', '元氣燕麥輕食燕麥組'];
+            final mockPrices = ['\$140', '\$125', '\$95'];
+            final mockCalories = ['520 kcal', '410 kcal', '350 kcal'];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey.shade100),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeaderImage(restaurant),
-                        Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: _buildTabContent(restaurant),
+                        Text(
+                          mockItemNames[index],
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          mockCalories[index],
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-                _buildFooterButton(restaurant),
-              ],
-            ),
-          ),
-        ),
-
-        Positioned(
-          top: MediaQuery.of(context).size.height * 0.1 + 16,
-          right: 24,
-          child: GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100.withOpacity(0.9),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: const Icon(Icons.close, size: 20),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 56, 24, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _buildTabButton(
-              id: 'ai',
-              label: 'AI Analysis',
-              icon: Icons.psychology,
-            ),
-            const SizedBox(width: 8),
-            _buildTabButton(
-              id: 'menu',
-              label: 'Menu',
-              icon: Icons.restaurant_menu,
-            ),
-            const SizedBox(width: 8),
-            _buildTabButton(
-              id: 'info',
-              label: 'Details',
-              icon: Icons.info_outline,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton({
-    required String id,
-    required String label,
-    required IconData icon,
-  }) {
-    final selected = activeTab == id;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          activeTab = id;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF6C63FF) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF6C63FF).withOpacity(0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: selected ? Colors.white : Colors.grey),
-            const SizedBox(width: 8),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-                color: selected ? Colors.white : Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderImage(Restaurant restaurant) {
-    return SizedBox(
-      height: 260,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(
-            restaurant.image,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
-              return Container(
-                color: Colors.grey.shade200,
-                child: const Icon(Icons.image_not_supported, size: 48),
-              );
-            },
-          ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [
-                  Colors.black.withOpacity(0.65),
-                  Colors.black.withOpacity(0.2),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            left: 28,
-            right: 28,
-            bottom: 28,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  restaurant.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 20),
-                    const SizedBox(width: 4),
-                    Text(
-                      restaurant.rating.toString(),
-                      style: const TextStyle(
-                        color: Colors.amber,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.4),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '${restaurant.priceRange} • ${restaurant.deliveryTime}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabContent(Restaurant restaurant) {
-    if (activeTab == 'ai') {
-      return _buildAiTab(restaurant);
-    } else if (activeTab == 'menu') {
-      return _buildMenuTab(restaurant);
-    } else {
-      return _buildInfoTab(restaurant);
-    }
-  }
-
-  Widget _buildAiTab(Restaurant restaurant) {
-    return Column(
-      key: const ValueKey('ai'),
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(26),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6C63FF), Color(0xFF8E7CFF)],
-            ),
-            borderRadius: BorderRadius.circular(36),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6C63FF).withOpacity(0.25),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.psychology, color: Colors.white, size: 16),
-                    SizedBox(width: 6),
-                    Text(
-                      'AI MATCHING ANALYSIS',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Column(
-                    children: [
-                      Text(
-                        restaurant.wiseScore.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const Text(
-                        'MATCH SCORE',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 22),
-                  Expanded(
-                    child: Text(
-                      '"${restaurant.wiseReason}"',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        height: 1.5,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Text(
+                    mockPrices[index],
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF059669),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 22),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: restaurant.nutritionalHighlights.map((tag) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.15)),
-                    ),
-                    child: Text(
-                      tag.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 18),
-
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatusCard(
-                icon: Icons.check_circle_outline,
-                iconColor: Colors.green,
-                bgColor: Colors.green.shade50,
-                label: 'Efficiency',
-                value: 'Approved',
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: _buildStatusCard(
-                icon: Icons.track_changes,
-                iconColor: const Color(0xFF6C63FF),
-                bgColor: const Color(0xFF6C63FF).withOpacity(0.1),
-                label: 'Goal Match',
-                value: 'Excellent',
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ],
     );
   }
-
-  Widget _buildStatusCard({
-    required IconData icon,
-    required Color iconColor,
-    required Color bgColor,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      height: 140,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.75),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: iconColor),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Color(0xFF1E293B),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuTab(Restaurant restaurant) {
-    final url =
-        restaurant.menuUrl ??
-        'https://www.google.com/search?q=${Uri.encodeComponent('${restaurant.name} menu')}';
-
-    return Column(
-      key: const ValueKey('menu'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 8, bottom: 16),
-          child: Text(
-            'Full Interactive Menu',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-        ),
-        GestureDetector(
-          onTap: () => _openUrl(url),
-          child: Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(36),
-              border: Border.all(color: Colors.grey.shade100, width: 2),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(Icons.star, color: Colors.amber, size: 30),
-                ),
-                const SizedBox(width: 18),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'View on Google Maps',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'REAL-TIME PRICES & PHOTOS',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.chevron_right),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoTab(Restaurant restaurant) {
-    final items = [
-      _InfoItem(
-        label: 'Cuisine',
-        value: restaurant.categories.join(', '),
-        icon: Icons.restaurant,
-        iconColor: Colors.indigo,
-        bgColor: Colors.indigo.shade50,
-      ),
-      _InfoItem(
-        label: 'Busy Time',
-        value: 'Low (10 min wait)',
-        icon: Icons.show_chart,
-        iconColor: Colors.pink,
-        bgColor: Colors.pink.shade50,
-      ),
-      _InfoItem(
-        label: 'Student Rating',
-        value: '4.9/5 stars',
-        icon: Icons.star,
-        iconColor: Colors.amber,
-        bgColor: Colors.amber.shade50,
-      ),
-      _InfoItem(
-        label: 'Location Accuracy',
-        value: 'High Confidence',
-        icon: Icons.track_changes,
-        iconColor: Colors.green,
-        bgColor: Colors.green.shade50,
-      ),
-    ];
-
-    return Column(
-      key: const ValueKey('info'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 8, bottom: 16),
-          child: Text(
-            'Restaurant Details',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF1E293B),
-            ),
-          ),
-        ),
-        ...items.map((item) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.grey.shade100),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: item.bgColor,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(item.icon, color: item.iconColor),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 9,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.value,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF1E293B),
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-
-  Widget _buildFooterButton(Restaurant restaurant) {
-    final url =
-        'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(restaurant.name)}';
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(28, 16, 28, 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade100)),
-      ),
-      child: GestureDetector(
-        onTap: () => _openUrl(url),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6C63FF), Color(0xFF8E7CFF)],
-            ),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6C63FF).withOpacity(0.28),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.navigation, color: Colors.white),
-              SizedBox(width: 10),
-              Text(
-                'Start Local Search',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoItem {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color iconColor;
-  final Color bgColor;
-
-  _InfoItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.iconColor,
-    required this.bgColor,
-  });
 }
