@@ -420,10 +420,32 @@ class DashboardView extends StatelessWidget {
                   Expanded(
                     child: GestureDetector(
                       onTap: () {
-                        showDialog<void>(
+                        showModalBottomSheet<void>(
                           context: context,
-                          builder: (BuildContext dialogContext) =>
-                              const RecordMealDialog(),
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (BuildContext modalContext) {
+                            return DraggableScrollableSheet(
+                              initialChildSize: 0.72, // 初始高度
+                              minChildSize: 0.45,     // 最小高度
+                              maxChildSize: 0.92,     // 最大高度
+                              expand: false,
+                              builder: (_, scrollController) {
+                                return Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(32),
+                                    ),
+                                  ),
+                                  child: SingleChildScrollView(
+                                    controller: scrollController,
+                                    child: const RecordMealDialog(),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
                       },
                       child: Container(
