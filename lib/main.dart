@@ -16,8 +16,9 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-  } catch (e) {
+  } catch (e, stack) {
     print("Firebase 初始化失敗: $e");
+    print("堆疊追蹤: $stack");
   }
 
   runApp(

@@ -4,15 +4,15 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/types.dart';
 
 class AIService {
-  late final GenerativeModel _model;
+  final GenerativeModel _model;
   
   // 建議將 API Key 放在環境變數或安全的組態中
-  AIService({required String apiKey}) {
+  AIService({required String apiKey}):
     _model = GenerativeModel(
       model: 'gemini-1.5-flash', // 在 Flutter 行動端穩定支援多模態的型號
       apiKey: apiKey,
     );
-  }
+  
 
   // 1. 分析食物照片
   Future<Map<String, dynamic>> analyzeFoodImage(Uint8List imageBytes) async {

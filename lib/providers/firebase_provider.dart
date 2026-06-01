@@ -6,6 +6,9 @@ import '../models/types.dart';
 import '../services/firebase_service.dart';
 import '../models/mock_data.dart'; // 引入靜態資料池
 
+import 'package:flutter/foundation.dart';
+
+
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -51,6 +54,7 @@ class FirebaseProvider with ChangeNotifier {
 
   // 2. 監聽 Firestore 中的使用者檔案與飲食紀錄 (onSnapshot)
   void _initDataListeners(String uid) {
+    debugPrint('[FirebaseProvider] 開始監聽資料，UID: $uid');
     _cancelDataSubscriptions();
 
     // 監聽 User Profile
@@ -58,8 +62,10 @@ class FirebaseProvider with ChangeNotifier {
     _profileSubscription = userRef.snapshots().listen(
       (docSnap) async {
         if (docSnap.exists) {
+          debugPrint('[FirebaseProvider] 成功讀取 User Profile');
           _userProfileJson = docSnap.data();
         } else {
+          debugPrint('[FirebaseProvider] 找不到 User Profile，開始初始化...');
           // 如果使用者第一次登入，初始化 Profile (對應網頁版 initialProfile)
           final initialProfile = {
             'displayName': _user?.displayName ?? 'Wise User',
@@ -123,12 +129,13 @@ class FirebaseProvider with ChangeNotifier {
     );
 
     // 監聽 飲食紀錄子集合 (records) 並依時間戳排序
-    final recordsRef = _db.collection('users').doc(uid).collection('records');
+    final recordsRef = _db.collection('users').doc(uid).collection('meals');
     _recordsSubscription = recordsRef
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen(
           (querySnap) {
+            debugPrint('[FirebaseProvider] 監聽到 ${querySnap.docs.length} 筆 meals 資料');
             _records = querySnap.docs.map((doc) {
               final data = doc.data();
               data['id'] = doc.id; // 把 document ID 塞進 map 裡
@@ -185,7 +192,7 @@ class FirebaseProvider with ChangeNotifier {
   // 新增紀錄
   Future<void> addMealRecord(Map<String, dynamic> recordJson) async {
     if (_user == null) return;
-    final path = 'users/${_user!.uid}/records';
+    final path = 'users/${_user!.uid}/meals';
     try {
       if (!recordJson.containsKey('timestamp')) {
         recordJson['timestamp'] = DateTime.now().millisecondsSinceEpoch;
@@ -193,7 +200,7 @@ class FirebaseProvider with ChangeNotifier {
       await _db
           .collection('users')
           .doc(_user!.uid)
-          .collection('records')
+          .collection('meals')
           .add(recordJson);
     } catch (err) {
       _firebaseService.handleFirestoreError(err, OperationType.create, path);
@@ -203,7 +210,7 @@ class FirebaseProvider with ChangeNotifier {
   // 刪除紀錄
   Future<void> deleteMealRecord(String id) async {
     if (_user == null) return;
-    final path = 'users/${_user!.uid}/records/$id';
+    final path = 'users/${_user!.uid}/meals/$id';
     try {
       await _db.doc(path).delete();
     } catch (err) {
@@ -214,7 +221,7 @@ class FirebaseProvider with ChangeNotifier {
   // 更新單筆飲食紀錄
   Future<void> updateMealRecord(String id, Map<String, dynamic> updates) async {
     if (_user == null) return;
-    final path = 'users/${_user!.uid}/records/$id';
+    final path = 'users/${_user!.uid}/meals/$id';
     try {
       await _db.doc(path).update(updates);
     } catch (err) {
