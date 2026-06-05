@@ -1,4 +1,68 @@
-import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+double _readDouble(dynamic value, {double fallback = 0}) {
+  if (value is num) {
+    return value.toDouble();
+  }
+
+  return double.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+int _readInt(dynamic value, {int fallback = 0}) {
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+String _readString(dynamic value, {String fallback = ''}) {
+  final String text = value?.toString() ?? '';
+
+  return text.trim().isEmpty ? fallback : text;
+}
+
+String? _readNullableString(dynamic value) {
+  final String text = value?.toString() ?? '';
+
+  return text.trim().isEmpty ? null : text;
+}
+
+List<String> _readStringList(dynamic value) {
+  if (value is! List) {
+    return [];
+  }
+
+  return value.map((item) => item.toString()).toList();
+}
+
+Map<String, dynamic> _readMap(dynamic value) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
+  }
+
+  return {};
+}
+
+int _readTimestamp(dynamic value) {
+  if (value is Timestamp) {
+    return value.millisecondsSinceEpoch;
+  }
+
+  if (value is DateTime) {
+    return value.millisecondsSinceEpoch;
+  }
+
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return DateTime.now().millisecondsSinceEpoch;
+}
 
 class Nutrients {
   final double calories;
@@ -19,23 +83,25 @@ class Nutrients {
 
   factory Nutrients.fromJson(Map<String, dynamic> json) {
     return Nutrients(
-      calories: (json['calories'] as num).toDouble(),
-      protein: (json['protein'] as num).toDouble(),
-      carbs: (json['carbs'] as num).toDouble(),
-      fat: (json['fat'] as num).toDouble(),
-      fiber: (json['fiber'] as num).toDouble(),
-      fruit: json['fruit'] != null ? (json['fruit'] as num).toDouble() : null,
+      calories: _readDouble(json['calories']),
+      protein: _readDouble(json['protein']),
+      carbs: _readDouble(json['carbs']),
+      fat: _readDouble(json['fat']),
+      fiber: _readDouble(json['fiber']),
+      fruit: json['fruit'] == null ? null : _readDouble(json['fruit']),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'calories': calories,
-        'protein': protein,
-        'carbs': carbs,
-        'fat': fat,
-        'fiber': fiber,
-        if (fruit != null) 'fruit': fruit,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+      'fiber': fiber,
+      if (fruit != null) 'fruit': fruit,
+    };
+  }
 }
 
 class MenuItem {
@@ -55,21 +121,23 @@ class MenuItem {
 
   factory MenuItem.fromJson(Map<String, dynamic> json) {
     return MenuItem(
-      name: json['name'] as String,
-      price: json['price'] as String,
-      description: json['description'] as String,
-      calories: json['calories'] != null ? (json['calories'] as num).toDouble() : null,
-      image: json['image'] as String?,
+      name: _readString(json['name'], fallback: '未命名品項'),
+      price: _readString(json['price'], fallback: '價格未知'),
+      description: _readString(json['description']),
+      calories: json['calories'] == null ? null : _readDouble(json['calories']),
+      image: _readNullableString(json['image']),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'price': price,
-        'description': description,
-        if (calories != null) 'calories': calories,
-        if (image != null) 'image': image,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'price': price,
+      'description': description,
+      if (calories != null) 'calories': calories,
+      if (image != null) 'image': image,
+    };
+  }
 }
 
 class MenuCategory {
@@ -79,16 +147,22 @@ class MenuCategory {
   MenuCategory({required this.category, required this.items});
 
   factory MenuCategory.fromJson(Map<String, dynamic> json) {
+    final dynamic rawItems = json['items'];
+
     return MenuCategory(
-      category: json['category'] as String,
-      items: (json['items'] as List).map((e) => MenuItem.fromJson(e as Map<String, dynamic>)).toList(),
+      category: _readString(json['category'], fallback: '其他'),
+      items: rawItems is List
+          ? rawItems.map((item) => MenuItem.fromJson(_readMap(item))).toList()
+          : [],
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'category': category,
-        'items': items.map((e) => e.toJson()).toList(),
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'category': category,
+      'items': items.map((item) => item.toJson()).toList(),
+    };
+  }
 }
 
 class Restaurant {
@@ -129,44 +203,54 @@ class Restaurant {
   });
 
   factory Restaurant.fromJson(Map<String, dynamic> json) {
+    final dynamic rawMenuItems = json['menuItems'];
+
     return Restaurant(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      image: json['image'] as String,
-      rating: (json['rating'] as num).toDouble(),
-      distance: json['distance'] as String,
-      wiseScore: json['wiseScore'] as int,
-      wiseReason: json['wiseReason'] as String,
-      nutritionalHighlights: (json['nutritionalHighlights'] as List?)?.map((e) => e as String).toList(),
-      warnings: (json['warnings'] as List?)?.map((e) => e as String).toList(),
-      deliveryTime: json['deliveryTime'] as String,
-      categories: (json['categories'] as List).map((e) => e as String).toList(),
-      priceRange: json['priceRange'] as String,
-      menuUrl: json['menuUrl'] as String?,
-      menuPhotos: (json['menuPhotos'] as List?)?.map((e) => e as String).toList(),
-      menuItems: (json['menuItems'] as List?)?.map((e) => MenuCategory.fromJson(e as Map<String, dynamic>)).toList(),
+      id: _readString(json['id']),
+      name: _readString(json['name'], fallback: '未命名餐廳'),
+      image: _readString(json['image']),
+      rating: _readDouble(json['rating']),
+      distance: _readString(json['distance'], fallback: '距離未知'),
+      wiseScore: _readInt(json['wiseScore']),
+      wiseReason: _readString(json['wiseReason'], fallback: '尚未產生推薦分析'),
+      nutritionalHighlights: _readStringList(json['nutritionalHighlights']),
+      warnings: _readStringList(json['warnings']),
+      deliveryTime: _readString(json['deliveryTime'], fallback: '時間未知'),
+      categories: _readStringList(json['categories']),
+      priceRange: _readString(json['priceRange'], fallback: '價格未知'),
+      menuUrl: _readNullableString(json['menuUrl']),
+      menuPhotos: _readStringList(json['menuPhotos']),
+      menuItems: rawMenuItems is List
+          ? rawMenuItems
+                .map((item) => MenuCategory.fromJson(_readMap(item)))
+                .toList()
+          : [],
       isHealthy: json['isHealthy'] as bool?,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'image': image,
-        'rating': rating,
-        'distance': distance,
-        'wiseScore': wiseScore,
-        'wiseReason': wiseReason,
-        if (nutritionalHighlights != null) 'nutritionalHighlights': nutritionalHighlights,
-        if (warnings != null) 'warnings': warnings,
-        'deliveryTime': deliveryTime,
-        'categories': categories,
-        'priceRange': priceRange,
-        if (menuUrl != null) 'menuUrl': menuUrl,
-        if (menuPhotos != null) 'menuPhotos': menuPhotos,
-        if (menuItems != null) 'menuItems': menuItems!.map((e) => e.toJson()).toList(),
-        if (isHealthy != null) 'isHealthy': isHealthy,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'image': image,
+      'rating': rating,
+      'distance': distance,
+      'wiseScore': wiseScore,
+      'wiseReason': wiseReason,
+      if (nutritionalHighlights != null)
+        'nutritionalHighlights': nutritionalHighlights,
+      if (warnings != null) 'warnings': warnings,
+      'deliveryTime': deliveryTime,
+      'categories': categories,
+      'priceRange': priceRange,
+      if (menuUrl != null) 'menuUrl': menuUrl,
+      if (menuPhotos != null) 'menuPhotos': menuPhotos,
+      if (menuItems != null)
+        'menuItems': menuItems!.map((category) => category.toJson()).toList(),
+      if (isHealthy != null) 'isHealthy': isHealthy,
+    };
+  }
 }
 
 class Category {
@@ -178,13 +262,15 @@ class Category {
 
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      icon: json['icon'] as String,
+      id: _readString(json['id']),
+      name: _readString(json['name']),
+      icon: _readString(json['icon']),
     );
   }
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'icon': icon};
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'icon': icon};
+  }
 }
 
 class MealRecord {
@@ -207,26 +293,42 @@ class MealRecord {
   });
 
   factory MealRecord.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic> nestedNutrients = _readMap(json['nutrients']);
+
+    final Map<String, dynamic> nutrientData = nestedNutrients.isNotEmpty
+        ? nestedNutrients
+        : {
+            // 相容舊版資料格式
+            'calories': json['calories'],
+            'protein': json['protein'],
+            'carbs': json['carbs'],
+            'fat': json['fat'],
+            'fiber': json['fiber'],
+            'fruit': json['fruit'],
+          };
+
     return MealRecord(
-      id: json['id'] as String,
-      timestamp: json['timestamp'] as int,
-      name: json['name'] as String,
-      image: json['image'] as String?,
-      nutrients: Nutrients.fromJson(json['nutrients'] as Map<String, dynamic>),
-      healthScore: json['healthScore'] as int,
-      cost: json['cost'] != null ? (json['cost'] as num).toDouble() : null,
+      id: _readString(json['id']),
+      timestamp: _readTimestamp(json['timestamp']),
+      name: _readString(json['name'] ?? json['restaurant'], fallback: '未命名餐點'),
+      image: _readNullableString(json['image'] ?? json['imageUrl']),
+      nutrients: Nutrients.fromJson(nutrientData),
+      healthScore: _readInt(json['healthScore']),
+      cost: json['cost'] == null ? null : _readDouble(json['cost']),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'timestamp': timestamp,
-        'name': name,
-        if (image != null) 'image': image,
-        'nutrients': nutrients.toJson(),
-        'healthScore': healthScore,
-        if (cost != null) 'cost': cost,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'timestamp': timestamp,
+      'name': name,
+      if (image != null) 'image': image,
+      'nutrients': nutrients.toJson(),
+      'healthScore': healthScore,
+      if (cost != null) 'cost': cost,
+    };
+  }
 }
 
 class FriendProfile {
@@ -252,16 +354,25 @@ class UserStats {
   final Nutrients current;
   final Nutrients remaining;
 
-  UserStats({required this.goals, required this.current, required this.remaining});
+  UserStats({
+    required this.goals,
+    required this.current,
+    required this.remaining,
+  });
 }
 
 class BudgetPeriod {
   final String period;
   final double spent;
   final double limit;
-  final String type; // 'weekly' or 'monthly'
+  final String type;
 
-  BudgetPeriod({required this.period, required this.spent, required this.limit, required this.type});
+  BudgetPeriod({
+    required this.period,
+    required this.spent,
+    required this.limit,
+    required this.type,
+  });
 }
 
 class BudgetData {
@@ -325,7 +436,7 @@ class HistoryItem {
   final String period;
   final double limit;
   final double spent;
-  final String type; // 'weekly' 或 'monthly'
+  final String type;
 
   HistoryItem({
     required this.period,
@@ -346,5 +457,3 @@ class WeeklyChartData {
     required this.limit,
   });
 }
-
-

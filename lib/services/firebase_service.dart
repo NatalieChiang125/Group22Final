@@ -1,9 +1,9 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:typed_data'; // 處理圖片位元組需要
 
 enum OperationType { create, update, delete, list, get, write }
 
@@ -37,20 +37,46 @@ class FirebaseService {
 
   User? get currentUser => _auth.currentUser;
 
+  /// 上傳餐點照片至 Firebase Storage。
+  ///
+  /// 儲存位置：
+  /// users/{uid}/meal_images/{timestamp}.jpg
   Future<String> uploadMealImage(Uint8List imageBytes, String uid) async {
-    if (imageBytes.isEmpty) return '';
+    if (imageBytes.isEmpty) {
+      throw Exception('圖片內容是空的');
+    }
+
     try {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = _storage.ref().child('users/$uid/meal_images/$fileName');
-      
-      await ref.putData(imageBytes, SettableMetadata(contentType: 'image/jpeg'));
-      return await ref.getDownloadURL();
-    } catch (e) {
-      handleFirestoreError(e, OperationType.create, 'storage/meal_images');
-      return '';
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      final Reference imageRef = _storage
+          .ref()
+          .child('users')
+          .child(uid)
+          .child('meal_images')
+          .child(fileName);
+
+      await imageRef.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      return await imageRef.getDownloadURL();
+    } catch (error) {
+      handleFirestoreError(
+        error,
+        OperationType.create,
+        'storage/users/$uid/meal_images',
+      );
+
+      rethrow;
     }
   }
 
+  /// 將辨識完成的餐點寫入 Firestore。
+  ///
+  /// 儲存位置：
+  /// users/{uid}/records/{recordId}
   Future<void> saveMealRecord({
     required String name,
     required double? cost,
@@ -59,52 +85,57 @@ class FirebaseService {
     required double protein,
     required double carbs,
     required double fat,
-    String? imageUrl, // 這裡會傳入已經上傳好的 URL
+    double fiber = 0,
+    double fruit = 0,
+    String? imageUrl,
   }) async {
-    try {
-      final user = currentUser;
-      if (user == null) throw Exception("User not logged in");
+    final User? user = currentUser;
 
-      // 💡 修正：集合名稱統一改為 'meals'，對齊 Provider 的邏輯
-      final docRef = _db
+    if (user == null) {
+      throw Exception('請先登入帳號');
+    }
+
+    final String path = 'users/${user.uid}/records';
+
+    try {
+      final DocumentReference<Map<String, dynamic>> recordRef = _db
           .collection('users')
           .doc(user.uid)
-          .collection('meals') 
+          .collection('records')
           .doc();
 
-      await docRef.set({
-        'id': docRef.id,
-        'timestamp': FieldValue.serverTimestamp(), // 建議用 Server 時間較準確
-        'restaurant': name, // 依照你截圖中欄位名稱叫做 restaurant
+      await recordRef.set({
+        'id': recordRef.id,
+        'timestamp': FieldValue.serverTimestamp(),
+        'name': name,
         'cost': cost,
         'healthScore': healthScore,
-        'imageUrl': imageUrl ?? '', // 💡 存入網址
-        'calories': calories,
-        'protein': protein,
-        'carbs': carbs,
-        'fat': fat,
-        'fiber': 0, // 如果 AI 有提供可補上
-        'fruit': 0, // 如果 AI 有提供可補上
+        'image': imageUrl ?? '',
+        'nutrients': {
+          'calories': calories,
+          'protein': protein,
+          'carbs': carbs,
+          'fat': fat,
+          'fiber': fiber,
+          'fruit': fruit,
+        },
       });
-      print("餐點成功上傳至 Firestore! DocID: ${docRef.id}");
-    } catch (e) {
-      handleFirestoreError(
-        e,
-        OperationType.create,
-        'users/${currentUser?.uid}/meals',
-      );
+
+      print('餐點已寫入 Firestore：${recordRef.id}');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.create, path);
     }
   }
 
   Future<User?> loginWithGoogle() async {
     try {
-      final provider = GoogleAuthProvider();
+      final GoogleAuthProvider provider = GoogleAuthProvider();
 
-      final userCredential = await _auth.signInWithPopup(provider);
+      final UserCredential credential = await _auth.signInWithPopup(provider);
 
-      return userCredential.user;
+      return credential.user;
     } catch (error) {
-      print("Google login failed: $error");
+      print('Google login failed: $error');
       return null;
     }
   }
@@ -113,51 +144,52 @@ class FirebaseService {
     await _auth.signOut();
   }
 
-  // 錯誤處理機制
   void handleFirestoreError(
     Object error,
     OperationType operationType,
     String? path,
   ) {
-    final user = _auth.currentUser;
-    final authInfo = {
+    final User? user = _auth.currentUser;
+
+    final Map<String, dynamic> authInfo = {
       'userId': user?.uid,
       'email': user?.email,
       'emailVerified': user?.emailVerified,
       'isAnonymous': user?.isAnonymous,
       'providerInfo':
           user?.providerData
-              .map((p) => {'providerId': p.providerId, 'email': p.email})
+              .map(
+                (provider) => {
+                  'providerId': provider.providerId,
+                  'email': provider.email,
+                },
+              )
               .toList() ??
           [],
     };
 
-    final errInfo = FirestoreErrorInfo(
+    final FirestoreErrorInfo errorInfo = FirestoreErrorInfo(
       error: error.toString(),
       operationType: operationType,
       path: path,
       authInfo: authInfo,
     );
 
-    final errorString = errInfo.toJsonString();
-    print('Firestore Error: $errorString');
+    final String errorString = errorInfo.toJsonString();
+
+    print('Firebase Error: $errorString');
+
     throw Exception(errorString);
   }
 
-  // 測試連線
   Future<void> testConnection() async {
     try {
       await _db
           .collection('_internal_')
           .doc('connectivity_test')
           .get(const GetOptions(source: Source.server));
-    } catch (e) {
-      if (e.toString().contains('offline')) {
-        print(
-          "Please check your Firebase configuration or internet connection.",
-        );
-      }
+    } catch (error) {
+      print('Firebase connection test failed: $error');
     }
   }
-
 }

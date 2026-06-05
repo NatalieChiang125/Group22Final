@@ -41,12 +41,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD1Wmh4jGaCelfntLZ-OV8zWH6RF47Do5U',
-    appId: '1:500001544350:web:01e5f8427b9e1011ab038f',
-    messagingSenderId: '500001544350',
-    projectId: 'todolist-2ea05',
-    authDomain: 'todolist-2ea05.firebaseapp.com',
-    storageBucket: 'todolist-2ea05.firebasestorage.app',
+    apiKey: 'AIzaSyCTDIdp-sPealisUAjcmhkDXkZv4xqQRBE',
+    appId: '1:265175123695:web:dc1e05db4851e9435dbd1a',
+    messagingSenderId: '265175123695',
+    projectId: 'wisebite-10665',
+    authDomain: 'wisebite-10665.firebaseapp.com',
+    storageBucket: 'wisebite-10665.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
@@ -63,6 +63,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '265175123695',
     projectId: 'wisebite-10665',
     storageBucket: 'wisebite-10665.firebasestorage.app',
+    androidClientId: '265175123695-5cpbkcv78ucpnilevrapoi2uevqrh9cg.apps.googleusercontent.com',
+    iosClientId: '265175123695-oghrad14pildtlsb5m8f4qbllofnab8e.apps.googleusercontent.com',
     iosBundleId: 'com.example.wisebite',
   );
 
