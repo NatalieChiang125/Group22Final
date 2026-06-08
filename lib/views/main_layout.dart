@@ -197,16 +197,40 @@ class _MainLayoutState extends State<MainLayout> {
     final List<Widget> displayPages = List<Widget>.from(_staticPages);
 
     // 注入預算視圖
+
+    final double cloudLimit =
+        (firebaseProvider.userProfile?['budget']?['monthlyLimit'] as num?)
+            ?.toDouble() ??
+        15000.0;
+
+    // 從雲端即時讀取歷史封存紀錄 (history)
+    final List<dynamic> cloudHistoryRaw =
+        firebaseProvider.userProfile?['budget']?['history'] ?? [];
+    final List<BudgetPeriod> cloudHistory = cloudHistoryRaw.map((item) {
+      return BudgetPeriod(
+        period: item['period'] ?? 'Unknown',
+        limit: (item['limit'] as num?)?.toDouble() ?? 0.0,
+        spent: (item['spent'] as num?)?.toDouble() ?? 0.0,
+        type: item['type'] ?? 'monthly',
+      );
+    }).toList();
+
     displayPages[1] = BudgetView(
-      budget: _budgetData,
+      budget: BudgetData(monthlyLimit: cloudLimit, history: cloudHistory),
       currentSpending: _currentSpending,
-      onUpdateLimit: (double newLimit) {
-        setState(() {
-          _budgetData = BudgetData(
-            monthlyLimit: newLimit,
-            history: _budgetData.history,
+
+      onUpdateLimit: (double newLimit) async {
+        Map<String, dynamic> budgetUpdates = {'monthlyLimit': newLimit};
+        await firebaseProvider.updateBudget(budgetUpdates);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Budget limit saved'),
+              backgroundColor: Color(0xFF6366F1),
+            ),
           );
-        });
+        }
       },
     );
 
@@ -250,25 +274,46 @@ class _MainLayoutState extends State<MainLayout> {
         },
       ),
       endDrawer: SettingsSidebar(
-        currentPriorities: userPriorities,
-        currentIncludeBreakfast: userIncludeBreakfast,
-        currentAllergies: userSelectedAllergies,
-        currentDietaryStyles: userSelectedDietaryStyles,
+        currentPriorities:
+            firebaseProvider.userProfile?['preferences']?['priorityOrder']
+                ?.cast<String>() ??
+            ['Healthy Choice', 'Distance', 'Average Price', 'User Ratings'],
+        currentIncludeBreakfast:
+            firebaseProvider.userProfile?['preferences']?['eatBreakfast'] ??
+            true,
+        currentAllergies:
+            firebaseProvider.userProfile?['preferences']?['allergies']
+                ?.cast<String>() ??
+            [],
+        currentDietaryStyles:
+            firebaseProvider.userProfile?['preferences']?['dietaryPreference']
+                ?.cast<String>() ??
+            ['Balanced'],
+
         onApply:
             (
               List<String> newPriorities,
               bool newIncludeBreakfast,
               List<String> newAllergies,
               List<String> newDietaryStyles,
-            ) {
-              setState(() {
-                userPriorities = newPriorities;
-                userIncludeBreakfast = newIncludeBreakfast;
-                userSelectedAllergies = newAllergies;
-                userSelectedDietaryStyles = newDietaryStyles;
-              });
-
-              print('主頁面資料儲存成功：$userPriorities');
+            ) async {
+              Map<String, dynamic> preferenceUpdates = {
+                'priorityOrder': newPriorities,
+                'eatBreakfast': newIncludeBreakfast,
+                'allergies': newAllergies,
+                'dietaryPreference': newDietaryStyles,
+              };
+              Provider.of<FirebaseProvider>(
+                context,
+                listen: false,
+              ).updatePreferences(preferenceUpdates);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Settings updated successfully!'),
+                  backgroundColor: Color(0xFF2E8B87),
+                  duration: Duration(seconds: 2),
+                ),
+              );
             },
       ),
       body: SafeArea(
