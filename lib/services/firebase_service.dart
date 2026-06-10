@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 enum OperationType { create, update, delete, list, get, write }
 
@@ -127,21 +128,67 @@ class FirebaseService {
     }
   }
 
+  // Future<User?> loginWithGoogle() async {
+  //   try {
+  //     final GoogleAuthProvider provider = GoogleAuthProvider();
+
+  //     final UserCredential credential = await _auth.signInWithPopup(provider);
+
+  //     return credential.user;
+  //   } catch (error) {
+  //     print('Google login failed: $error');
+  //     return null;
+  //   }
+  // }
+
+  // Future<void> logout() async {
+  //   await _auth.signOut();
+  // }
+
   Future<User?> loginWithGoogle() async {
     try {
-      final GoogleAuthProvider provider = GoogleAuthProvider();
+      if (kIsWeb) {
+        // 1. 如果是網頁版，使用原本的彈出視窗 (Popup)
+        final GoogleAuthProvider provider = GoogleAuthProvider();
+        final UserCredential credential = await _auth.signInWithPopup(provider);
+        return credential.user;
+      } else {
+        // 2. 如果是行動裝置/模擬器，改用原生裝置的登入流程
+        // 觸發裝置上的 Google 帳號選單
+        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
 
-      final UserCredential credential = await _auth.signInWithPopup(provider);
+        if (googleUser == null) {
+          // 使用者取消了登入流程
+          print('Google login canceled by user.');
+          return null;
+        }
 
-      return credential.user;
+        // 取得登入權杖驗證資料
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
+
+        // 將憑證包裝後傳給 Firebase Auth 進行身分驗證
+        final AuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        final UserCredential credentialResult = await _auth
+            .signInWithCredential(credential);
+        return credentialResult.user;
+      }
     } catch (error) {
       print('Google login failed: $error');
       return null;
     }
   }
 
+  /// 登出方法（手機端登出時，建議同步將 GoogleSignIn 狀態清空）
   Future<void> logout() async {
     await _auth.signOut();
+    if (!kIsWeb) {
+      await GoogleSignIn().signOut();
+    }
   }
 
   void handleFirestoreError(

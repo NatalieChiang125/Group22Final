@@ -794,13 +794,11 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Future<void> _loadRestaurants() async {
-    final provider = Provider.of<FirebaseProvider>(
-      context,
-      listen: false,
-    );
+    final provider = Provider.of<FirebaseProvider>(context, listen: false);
 
     try {
-      final result = await provider.fetchNearbyRestaurants();
+      final result = await provider.fetchNearbyRestaurants(); //改成這行顯示不了餐廳
+      //final result = await provider.getSortedRestaurants(0.0, 15000.0);//改成這行只會顯示假餐廳
 
       setState(() {
         _restaurants = result;
@@ -825,9 +823,7 @@ class _DashboardViewState extends State<DashboardView> {
       );
     }
 
-
-    final userProfile =
-        firebaseProvider.userProfile ?? <String, dynamic>{};
+    final userProfile = firebaseProvider.userProfile ?? <String, dynamic>{};
     final records = firebaseProvider.records ?? [];
 
     double monthlyLimit = 15000.0;
@@ -835,8 +831,7 @@ class _DashboardViewState extends State<DashboardView> {
     if (userProfile is Map &&
         userProfile['budget'] is Map &&
         userProfile['budget']['monthlyLimit'] != null) {
-      monthlyLimit =
-          (userProfile['budget']['monthlyLimit']).toDouble();
+      monthlyLimit = (userProfile['budget']['monthlyLimit']).toDouble();
     }
 
     final now = DateTime.now();
@@ -845,8 +840,7 @@ class _DashboardViewState extends State<DashboardView> {
     double todaySpend = 0;
 
     for (final r in records) {
-      final date =
-          DateTime.fromMillisecondsSinceEpoch(r.timestamp);
+      final date = DateTime.fromMillisecondsSinceEpoch(r.timestamp);
 
       final cost = (r.cost ?? 0).toDouble();
 
@@ -884,8 +878,8 @@ class _DashboardViewState extends State<DashboardView> {
                         now.hour < 12
                             ? "早安"
                             : now.hour < 18
-                                ? "午安"
-                                : "晚安",
+                            ? "午安"
+                            : "晚安",
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -920,9 +914,11 @@ class _DashboardViewState extends State<DashboardView> {
                     const SizedBox(height: 10),
                     LinearProgressIndicator(value: progress),
                     const SizedBox(height: 10),
-                    Text(overBudget
-                        ? "已超支 -${monthlySpend - monthlyLimit}"
-                        : "剩餘 $remaining"),
+                    Text(
+                      overBudget
+                          ? "已超支 -${monthlySpend - monthlyLimit}"
+                          : "剩餘 $remaining",
+                    ),
                   ],
                 ),
               ),
@@ -953,9 +949,7 @@ class _DashboardViewState extends State<DashboardView> {
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         title: Text(r.name ?? ''),
-                        subtitle: Text(
-                          "${r.categories?.join(" • ") ?? ""}",
-                        ),
+                        subtitle: Text("${r.categories?.join(" • ") ?? ""}"),
                         trailing: Text("⭐ ${r.rating}"),
                         onTap: () {
                           showModalBottomSheet(

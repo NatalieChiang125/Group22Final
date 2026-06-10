@@ -6,16 +6,13 @@ import 'package:flutter/material.dart';
 
 import '../models/types.dart';
 import '../services/firebase_service.dart';
-<<<<<<< HEAD
-=======
+
 import '../models/mock_data.dart'; // 引入靜態資料池
 import '../services/google_places_service.dart';
 
 import 'package:geolocator/geolocator.dart';
 
 import 'package:flutter/foundation.dart';
-
->>>>>>> cdfe34f (modify recommand res + google_map)
 
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -204,7 +201,6 @@ class FirebaseProvider with ChangeNotifier {
         );
   }
 
-<<<<<<< HEAD
   void _initRestaurantsListener() {
     _restaurantsSubscription = _db
         .collection('restaurants')
@@ -237,7 +233,6 @@ class FirebaseProvider with ChangeNotifier {
         );
   }
 
-=======
   Future<List<Restaurant>> fetchNearbyRestaurants() async {
     try {
       // 取得定位
@@ -259,7 +254,6 @@ class FirebaseProvider with ChangeNotifier {
   }
 
   // 3. 實作各式各樣的資料操作方法 (Methods)
->>>>>>> cdfe34f (modify recommand res + google_map)
   Future<void> loginWithGoogle() async {
     _loading = true;
     notifyListeners();
@@ -414,8 +408,6 @@ class FirebaseProvider with ChangeNotifier {
     }
   }
 
-<<<<<<< HEAD
-=======
   Future<List<Restaurant>> getSortedRestaurants(
     double todaySpend,
     double dailyBudget,
@@ -432,29 +424,31 @@ class FirebaseProvider with ChangeNotifier {
       bool isOverBudget = todaySpend > dailyBudget;
 
       // 2. 計算距離
+      // Position position = await Geolocator.getCurrentPosition(
+      //   locationSettings: const LocationSettings(
+      //     accuracy: LocationAccuracy.medium,
+      //   ),
+      // );
       Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-        ),
+        desiredAccuracy: LocationAccuracy.medium,
       );
 
       for (var r in list) {
-        final distanceKm = Geolocator.distanceBetween(
-            position.latitude,
-            position.longitude,
-            r.lat,
-            r.lng,
-          ) /
-          1000;
+        final distanceKm =
+            Geolocator.distanceBetween(
+              position.latitude,
+              position.longitude,
+              r.lat,
+              r.lng,
+            ) /
+            1000;
         r.computedDistance = distanceKm;
       }
 
       // 3. 排序邏輯（保留你原本智慧排序）
       list.sort((a, b) {
-        final scoreA =
-            a.wiseScore - ((a.computedDistance ?? 0) * 2).toInt();
-        final scoreB =
-            b.wiseScore - ((b.computedDistance ?? 0) * 2).toInt();
+        final scoreA = a.wiseScore - ((a.computedDistance ?? 0) * 2).toInt();
+        final scoreB = b.wiseScore - ((b.computedDistance ?? 0) * 2).toInt();
 
         return scoreB.compareTo(scoreA);
       });
@@ -500,7 +494,7 @@ class FirebaseProvider with ChangeNotifier {
   // }
 
   // 輔助方法：登出或切換使用者時清空監聽器
->>>>>>> cdfe34f (modify recommand res + google_map)
+
   void _cancelDataSubscriptions() {
     _profileSubscription?.cancel();
     _recordsSubscription?.cancel();

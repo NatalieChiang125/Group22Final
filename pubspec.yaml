@@ -47,8 +47,11 @@ dependencies:
   firebase_core: ^4.9.0
   firebase_storage: ^13.4.2
   file_picker: ^8.0.0
-  geolocator: ^13.0.1  # 取得 GPS 定位
-  google_maps_flutter: ^2.9.0 # 如果需要地圖視圖
+  # geolocator: ^13.0.1  # 取得 GPS 定位
+  # google_maps_flutter: ^2.9.0 # 如果需要地圖視圖
+  geolocator: 11.0.0          # 移除 ^ 符號，鎖定在 11.0.0
+  google_maps_flutter: 2.5.3
+
   http: ^1.2.1
 
 dev_dependencies:
