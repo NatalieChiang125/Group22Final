@@ -1,4 +1,4 @@
-//要用google登入功能的話，請跑flutter run -d chrome --web-port=60444
+//要用google登入功能的話，請跑flutter run -d chrome --web-port=60444 --dart-define=GEMINI_API_KEY=你的API金鑰
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

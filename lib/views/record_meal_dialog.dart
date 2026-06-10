@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'meal_analysis_result_view.dart';
 
 import '../services/ai_service.dart';
 import '../services/firebase_service.dart';
@@ -195,20 +196,20 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
             .timeout(
               const Duration(seconds: 60),
               onTimeout: () {
-                throw Exception('Gemini 分析超時，請稍後重試或更換較小的圖片。');
+                throw Exception('Gemini 分析超時，請稍後重試。');
               },
             );
 
-        debugPrint('STEP 6：Gemini 餐點分析成功');
+        debugPrint('Gemini 餐點分析成功');
         debugPrint('Gemini 回傳：$aiResult');
-
-        recordName = aiResult['name']?.toString() ?? '相機分析餐點';
-
-        healthScore = (aiResult['healthScore'] as num? ?? 0).toInt();
 
         final Map<String, dynamic> nutrients = Map<String, dynamic>.from(
           aiResult['nutrients'] as Map? ?? {},
         );
+
+        recordName = aiResult['name']?.toString() ?? '相機分析餐點';
+
+        healthScore = (aiResult['healthScore'] as num? ?? 0).toInt();
 
         calories = (nutrients['calories'] as num? ?? 0).toDouble();
 
@@ -221,6 +222,61 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
         fiber = (nutrients['fiber'] as num? ?? 0).toDouble();
 
         fruit = (nutrients['fruit'] as num? ?? 0).toDouble();
+
+        final double? confidence = (aiResult['confidence'] as num?)?.toDouble();
+
+        // 關閉「AI 正在分析」的 Loading。
+        _closeLoadingDialog();
+
+        if (!mounted) {
+          return;
+        }
+
+        // 開啟結果確認頁面。
+        final Map<String, dynamic>? editedResult = await Navigator.of(context)
+            .push<Map<String, dynamic>>(
+              MaterialPageRoute(
+                builder: (BuildContext pageContext) {
+                  return MealAnalysisResultView(
+                    imageBytes: selectedBytes,
+                    initialName: recordName,
+                    initialCost: cost,
+                    initialHealthScore: healthScore,
+                    initialCalories: calories,
+                    initialProtein: protein,
+                    initialCarbs: carbs,
+                    initialFat: fat,
+                    initialFiber: fiber,
+                    initialFruit: fruit,
+                    confidence: confidence,
+                  );
+                },
+              ),
+            );
+
+        // 使用者按取消，不寫入 Firebase。
+        if (editedResult == null) {
+          return;
+        }
+
+        recordName = editedResult['name']?.toString() ?? recordName;
+
+        cost = (editedResult['cost'] as num? ?? cost).toDouble();
+
+        healthScore = (editedResult['healthScore'] as num? ?? healthScore)
+            .toInt();
+
+        calories = (editedResult['calories'] as num? ?? calories).toDouble();
+
+        protein = (editedResult['protein'] as num? ?? protein).toDouble();
+
+        carbs = (editedResult['carbs'] as num? ?? carbs).toDouble();
+
+        fat = (editedResult['fat'] as num? ?? fat).toDouble();
+
+        fiber = (editedResult['fiber'] as num? ?? fiber).toDouble();
+
+        fruit = (editedResult['fruit'] as num? ?? fruit).toDouble();
       } else {
         final Map<String, dynamic> receiptResult = await _aiService
             .analyzeReceiptImage(selectedBytes)
@@ -231,14 +287,121 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
               },
             );
 
-        debugPrint('STEP 6：Gemini 發票辨識成功');
-        debugPrint('Gemini 回傳：$receiptResult');
+        debugPrint('Gemini 發票辨識成功');
+        debugPrint('Gemini 發票回傳：$receiptResult');
 
         final String merchant = receiptResult['merchant']?.toString() ?? '';
 
+        final double detectedTotal = (receiptResult['total'] as num? ?? 0)
+            .toDouble();
+
+        final double confidence = (receiptResult['confidence'] as num? ?? 0)
+            .toDouble();
+
         recordName = merchant.trim().isEmpty ? '發票消費紀錄' : merchant;
 
-        cost = (receiptResult['total'] as num? ?? 0).toDouble();
+        cost = detectedTotal;
+
+        // Gemini 分析完後先關閉 Loading。
+        _closeLoadingDialog();
+
+        if (!mounted) {
+          return;
+        }
+
+        final TextEditingController merchantController = TextEditingController(
+          text: recordName,
+        );
+
+        final TextEditingController totalController = TextEditingController(
+          text: cost.toStringAsFixed(0),
+        );
+
+        final Map<String, dynamic>? editedReceipt =
+            await showDialog<Map<String, dynamic>>(
+              context: context,
+              builder: (BuildContext dialogContext) {
+                return AlertDialog(
+                  title: const Text(
+                    '確認發票辨識結果',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  content: SizedBox(
+                    width: 420,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'AI 辨識可信度：'
+                          '${(confidence * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextField(
+                          controller: merchantController,
+                          decoration: InputDecoration(
+                            labelText: '店家名稱',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: totalController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: '實付金額',
+                            suffixText: '元',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                      },
+                      child: const Text('取消，不儲存'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext, {
+                          'merchant': merchantController.text.trim(),
+                          'total':
+                              double.tryParse(totalController.text.trim()) ?? 0,
+                        });
+                      },
+                      child: const Text('確認並儲存'),
+                    ),
+                  ],
+                );
+              },
+            );
+
+        merchantController.dispose();
+        totalController.dispose();
+
+        // 使用者取消，不寫入 Firestore。
+        if (editedReceipt == null) {
+          return;
+        }
+
+        final String editedMerchant =
+            editedReceipt['merchant']?.toString() ?? '';
+
+        recordName = editedMerchant.trim().isEmpty ? '發票消費紀錄' : editedMerchant;
+
+        cost = (editedReceipt['total'] as num? ?? 0).toDouble();
       }
 
       debugPrint('STEP 7：準備寫入 Firestore');
