@@ -68,7 +68,7 @@ final UserStats initialUserStats = UserStats(
   ),
 );
 
-final List<Restaurant> restaurantsData = [
+final List<Restaurant> mockRestaurants = [
   Restaurant(
     id: 'r1',
     name: 'Artisan Woodfire Pizza',
@@ -115,6 +115,7 @@ final List<Restaurant> restaurantsData = [
             calories: 740,
           ),
         ],
+
       ),
       MenuCategory(
         category: 'Starters',
@@ -129,6 +130,8 @@ final List<Restaurant> restaurantsData = [
       ),
     ],
     isHealthy: false,
+    lat: 0.0,
+    lng: 0.0,
   ),
   Restaurant(
     id: 'r2',
@@ -171,6 +174,8 @@ final List<Restaurant> restaurantsData = [
       ),
     ],
     isHealthy: true,
+    lat: 0.0,
+    lng: 0.0,
   ),
   Restaurant(
     id: 'r3',
@@ -213,6 +218,8 @@ final List<Restaurant> restaurantsData = [
       ),
     ],
     isHealthy: true,
+    lat: 0.0,
+    lng: 0.0,
   ),
   Restaurant(
     id: 'r4',
@@ -255,5 +262,7 @@ final List<Restaurant> restaurantsData = [
       ),
     ],
     isHealthy: false,
-  ),
+    lat: 0.0,
+    lng: 0.0,
+  )
 ];

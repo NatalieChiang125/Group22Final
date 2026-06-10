@@ -6,12 +6,22 @@ import 'package:flutter/material.dart';
 
 import '../models/types.dart';
 import '../services/firebase_service.dart';
+<<<<<<< HEAD
+=======
+import '../models/mock_data.dart'; // 引入靜態資料池
+import '../services/google_places_service.dart';
+
+import 'package:geolocator/geolocator.dart';
+
+import 'package:flutter/foundation.dart';
+
+>>>>>>> cdfe34f (modify recommand res + google_map)
 
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseService _firebaseService = FirebaseService();
-
+  final GooglePlacesService _googlePlacesService = GooglePlacesService();
   User? _user;
   Map<String, dynamic>? _userProfileJson;
 
@@ -194,6 +204,7 @@ class FirebaseProvider with ChangeNotifier {
         );
   }
 
+<<<<<<< HEAD
   void _initRestaurantsListener() {
     _restaurantsSubscription = _db
         .collection('restaurants')
@@ -226,6 +237,29 @@ class FirebaseProvider with ChangeNotifier {
         );
   }
 
+=======
+  Future<List<Restaurant>> fetchNearbyRestaurants() async {
+    try {
+      // 取得定位
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+
+      // 呼叫 Google Places API
+      final results = await _googlePlacesService.getNearbyRestaurants(
+        position.latitude,
+        position.longitude,
+      );
+
+      return List<Restaurant>.from(results);
+    } catch (e) {
+      debugPrint("Google Places error: $e");
+      return [];
+    }
+  }
+
+  // 3. 實作各式各樣的資料操作方法 (Methods)
+>>>>>>> cdfe34f (modify recommand res + google_map)
   Future<void> loginWithGoogle() async {
     _loading = true;
     notifyListeners();
@@ -380,6 +414,93 @@ class FirebaseProvider with ChangeNotifier {
     }
   }
 
+<<<<<<< HEAD
+=======
+  Future<List<Restaurant>> getSortedRestaurants(
+    double todaySpend,
+    double dailyBudget,
+  ) async {
+    try {
+      // 1. 改成從 Google Places 來
+      List<Restaurant> list = await fetchNearbyRestaurants();
+
+      if (list.isEmpty) {
+        // fallback（避免 API 失敗整個掛掉）
+        list = List<Restaurant>.from(mockRestaurants);
+      }
+
+      bool isOverBudget = todaySpend > dailyBudget;
+
+      // 2. 計算距離
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+
+      for (var r in list) {
+        final distanceKm = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            r.lat,
+            r.lng,
+          ) /
+          1000;
+        r.computedDistance = distanceKm;
+      }
+
+      // 3. 排序邏輯（保留你原本智慧排序）
+      list.sort((a, b) {
+        final scoreA =
+            a.wiseScore - ((a.computedDistance ?? 0) * 2).toInt();
+        final scoreB =
+            b.wiseScore - ((b.computedDistance ?? 0) * 2).toInt();
+
+        return scoreB.compareTo(scoreA);
+      });
+
+      return list;
+    } catch (e) {
+      debugPrint('餐廳推薦錯誤: $e');
+
+      return List<Restaurant>.from(mockRestaurants)
+        ..sort((a, b) => b.wiseScore.compareTo(a.wiseScore));
+    }
+  }
+
+  // List<Restaurant> getSmartRecommendations(
+  //   double todaySpend,
+  //   double dailyBudget,
+  // ) {
+  //   // 引入剛才建立的靜態資料池
+  //   final List<Restaurant> allRestaurants = List<Restaurant>.from(
+  //     mockRestaurants,
+  //   );
+
+  //   // 判斷是否已經超支
+  //   final bool isOverBudget = todaySpend > dailyBudget;
+
+  //   if (isOverBudget) {
+  //     // 💡 情境 A：超支了！將「預算救星/便利超商/\$ 價格區間」的餐廳權重拉高，並排在前面
+  //     allRestaurants.sort((a, b) {
+  //       final bool aIsSavings =
+  //           a.nutritionalHighlights?.contains('預算救星') ?? false;
+  //       final bool bIsSavings =
+  //           b.nutritionalHighlights?.contains('預算救星') ?? false;
+  //       if (aIsSavings && !bIsSavings) return -1;
+  //       if (!aIsSavings && bIsSavings) return 1;
+  //       return (b.wiseScore).compareTo(a.wiseScore); // 其餘按分數排
+  //     });
+  //   } else {
+  //     // 💡 情境 B：預算安全！優先推薦「WiseScore 最高、營養亮點豐富」的高品質健康餐盒
+  //     allRestaurants.sort((a, b) => (b.wiseScore).compareTo(a.wiseScore));
+  //   }
+
+  //   return allRestaurants;
+  // }
+
+  // 輔助方法：登出或切換使用者時清空監聽器
+>>>>>>> cdfe34f (modify recommand res + google_map)
   void _cancelDataSubscriptions() {
     _profileSubscription?.cancel();
     _recordsSubscription?.cancel();

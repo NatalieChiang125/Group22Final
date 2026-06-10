@@ -182,6 +182,9 @@ class Restaurant {
   final List<String>? menuPhotos;
   final List<MenuCategory>? menuItems;
   final bool? isHealthy;
+  final double lat; // 新增：緯度
+  final double lng; // 新增：經度
+  double? computedDistance; // 新增：用於排序的數值距離 (單位：公里)
 
   Restaurant({
     required this.id,
@@ -200,6 +203,9 @@ class Restaurant {
     this.menuPhotos,
     this.menuItems,
     this.isHealthy,
+    required this.lat,
+    required this.lng,
+    this.computedDistance,
   });
 
   factory Restaurant.fromJson(Map<String, dynamic> json) {
@@ -226,31 +232,30 @@ class Restaurant {
                 .toList()
           : [],
       isHealthy: json['isHealthy'] as bool?,
+      lat: (json['lat'] as num).toDouble(),
+      lng: (json['lng'] as num).toDouble(),
+      computedDistance: json['computedDistance'] as double?,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'image': image,
-      'rating': rating,
-      'distance': distance,
-      'wiseScore': wiseScore,
-      'wiseReason': wiseReason,
-      if (nutritionalHighlights != null)
-        'nutritionalHighlights': nutritionalHighlights,
-      if (warnings != null) 'warnings': warnings,
-      'deliveryTime': deliveryTime,
-      'categories': categories,
-      'priceRange': priceRange,
-      if (menuUrl != null) 'menuUrl': menuUrl,
-      if (menuPhotos != null) 'menuPhotos': menuPhotos,
-      if (menuItems != null)
-        'menuItems': menuItems!.map((category) => category.toJson()).toList(),
-      if (isHealthy != null) 'isHealthy': isHealthy,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'image': image,
+        'rating': rating,
+        'distance': distance,
+        'wiseScore': wiseScore,
+        'wiseReason': wiseReason,
+        if (nutritionalHighlights != null) 'nutritionalHighlights': nutritionalHighlights,
+        if (warnings != null) 'warnings': warnings,
+        'deliveryTime': deliveryTime,
+        'categories': categories,
+        'priceRange': priceRange,
+        if (menuUrl != null) 'menuUrl': menuUrl,
+        if (menuPhotos != null) 'menuPhotos': menuPhotos,
+        if (menuItems != null) 'menuItems': menuItems!.map((e) => e.toJson()).toList(),
+        if (isHealthy != null) 'isHealthy': isHealthy,
+      };
 }
 
 class Category {
