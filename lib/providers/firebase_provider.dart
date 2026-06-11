@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +13,75 @@ import '../models/mock_data.dart'; // 引入靜態資料池
 import '../services/google_places_service.dart';
 
 import 'package:geolocator/geolocator.dart';
+
+List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
+  final List<Restaurant> list = args['list'] as List<Restaurant>;
+  final double userLat = args['lat'] as double;
+  final double userLng = args['lng'] as double;
+  final bool isOverBudget = args['isOverBudget'] as bool;
+
+  double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const p = 0.017453292519943295; // Math.PI / 180
+    final a =
+        0.5 -
+        math.cos((lat2 - lat1) * p) / 2 +
+        math.cos(lat1 * p) *
+            math.cos(lat2 * p) *
+            (1 - math.cos((lon2 - lon1) * p)) /
+            2;
+    return 12742 * math.asin(math.sqrt(a)); // 乘以地球直徑
+  }
+
+  int getScore(Restaurant r) {
+    final double distPenalty = (r.computedDistance ?? 3) * 4;
+    int score = r.wiseScore - distPenalty.round();
+    if (isOverBudget && r.priceRange == r'$') score += 8;
+    if (r.isHealthy == true) score += 4;
+    return score;
+  }
+
+  for (final restaurant in list) {
+    restaurant.computedDistance = calculateDistance(
+      userLat,
+      userLng,
+      restaurant.lat,
+      restaurant.lng,
+    );
+  }
+
+  list.sort((a, b) => getScore(b).compareTo(getScore(a)));
+
+  return list;
+}
+
+List<Restaurant> _calculateDistanceOnlyInBackground(Map<String, dynamic> args) {
+  final List<Restaurant> list = args['list'] as List<Restaurant>;
+  final double userLat = args['lat'] as double;
+  final double userLng = args['lng'] as double;
+
+  double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const p = 0.017453292519943295;
+    final a =
+        0.5 -
+        math.cos((lat2 - lat1) * p) / 2 +
+        math.cos(lat1 * p) *
+            math.cos(lat2 * p) *
+            (1 - math.cos((lon2 - lon1) * p)) /
+            2;
+    return 12742 * math.asin(math.sqrt(a));
+  }
+
+  for (final restaurant in list) {
+    restaurant.computedDistance = calculateDistance(
+      userLat,
+      userLng,
+      restaurant.lat,
+      restaurant.lng,
+    );
+  }
+
+  return list;
+}
 
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -233,14 +304,25 @@ class FirebaseProvider with ChangeNotifier {
 
   Future<List<Restaurant>> fetchNearbyRestaurants() async {
     try {
+      debugPrint("[WiseBite Flow] 1. 準備獲取位置...");
       final Position position = await _getCurrentPosition();
+      debugPrint(
+        "[WiseBite Flow] 2. 位置鎖定: ${position.latitude}, ${position.longitude}",
+      );
 
+      debugPrint("[WiseBite Flow] 3. 開始呼叫 Google Places API...");
       final results = await _googlePlacesService.getNearbyRestaurants(
         position.latitude,
         position.longitude,
       );
+      if (results.isEmpty) return [];
 
-      return _withDistance(results, position);
+      final processedList = await compute(_calculateDistanceOnlyInBackground, {
+        'list': results,
+        'lat': position.latitude,
+        'lng': position.longitude,
+      });
+      return processedList;
     } catch (e) {
       debugPrint("Google Places error: $e");
       return [];
@@ -409,35 +491,29 @@ class FirebaseProvider with ChangeNotifier {
     try {
       final Position position = await _getCurrentPosition();
 
-      List<Restaurant> list = await _googlePlacesService.getNearbyRestaurants(
-        position.latitude,
-        position.longitude,
-      );
+      List<Restaurant> list = await _googlePlacesService
+          .getNearbyRestaurants(position.latitude, position.longitude)
+          .timeout(const Duration(seconds: 5));
 
       if (list.isEmpty) {
         list = List<Restaurant>.from(mockRestaurants);
       }
 
-      list = _withDistance(list, position);
-
       final bool isOverBudget = todaySpend > dailyBudget;
-      list.sort((a, b) {
-        final int scoreA = _restaurantRecommendationScore(a, isOverBudget);
-        final int scoreB = _restaurantRecommendationScore(b, isOverBudget);
-
-        return scoreB.compareTo(scoreA);
+      final sortedList = await compute(_processRestaurantsInBackground, {
+        'list': list,
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'isOverBudget': isOverBudget,
       });
 
-      return list;
+      return sortedList;
     } catch (e) {
       debugPrint('餐廳推薦錯誤: $e');
 
-      return List<Restaurant>.from(mockRestaurants)..sort(
-        (a, b) => _restaurantRecommendationScore(b, todaySpend > dailyBudget)
-            .compareTo(
-              _restaurantRecommendationScore(a, todaySpend > dailyBudget),
-            ),
-      );
+      return mockRestaurants
+          .map((r) => Restaurant.fromJson(r.toJson()))
+          .toList();
     }
   }
 
@@ -462,29 +538,29 @@ class FirebaseProvider with ChangeNotifier {
       throw Exception('定位權限被永久拒絕，請到系統設定開啟');
     }
 
-    return Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.medium,
-    );
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+      ).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('[WiseBite] 定位獲取逾時或失敗 ($e)，自動切換至預設座標進行 API 推薦');
+      return _getFallbackPosition();
+    }
   }
 
-  List<Restaurant> _withDistance(
-    List<Restaurant> restaurants,
-    Position position,
-  ) {
-    for (final Restaurant restaurant in restaurants) {
-      final double distanceKm =
-          Geolocator.distanceBetween(
-            position.latitude,
-            position.longitude,
-            restaurant.lat,
-            restaurant.lng,
-          ) /
-          1000;
-
-      restaurant.computedDistance = distanceKm;
-    }
-
-    return restaurants;
+  Position _getFallbackPosition() {
+    return Position(
+      latitude: 25.0174, // 可自行修改為你想要的測試座標
+      longitude: 121.5405,
+      timestamp: DateTime.now(),
+      accuracy: 0.0,
+      altitude: 0.0,
+      heading: 0.0,
+      speed: 0.0,
+      speedAccuracy: 0.0,
+      altitudeAccuracy: 0.0,
+      headingAccuracy: 0.0,
+    );
   }
 
   int _restaurantRecommendationScore(Restaurant restaurant, bool isOverBudget) {
