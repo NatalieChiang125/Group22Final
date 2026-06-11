@@ -4,6 +4,8 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>WiseBite 需要使用您的相機來拍攝餐點照片，以便進行 AI 智慧營養素分析與發票辨識。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>WiseBite 需要使用您的位置來推薦附近餐廳，並依距離、預算與評分排序。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

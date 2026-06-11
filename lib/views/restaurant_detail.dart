@@ -7,7 +7,7 @@ import 'package:wisebite/models/types.dart';
 
 class RestaurantDetail extends StatefulWidget {
   // 💡 這裡的 Restaurant 將直接對齊 mock_data.dart 與 types.dart 的完整結構
-  final dynamic restaurant;
+  final Restaurant restaurant;
   final VoidCallback onClose;
 
   const RestaurantDetail({
@@ -34,18 +34,13 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
   @override
   Widget build(BuildContext context) {
     final rest = widget.restaurant;
-    if (rest == null) return const SizedBox.shrink();
 
     // 安全取得 mock 資料中的 warnings 與 menuPhotos 欄位
     final List<String> highlights = List<String>.from(
       rest.nutritionalHighlights ?? [],
     );
-    final List<String> warnings =
-        rest.runtimeType.toString().contains('Restaurant') &&
-            rest.warnings != null
-        ? List<String>.from(rest.warnings)
-        : [];
-    final List<String> categories = List<String>.from(rest.categories ?? []);
+    final List<String> warnings = List<String>.from(rest.warnings ?? []);
+    final List<String> categories = List<String>.from(rest.categories);
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
@@ -69,8 +64,9 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                     fit: StackFit.expand,
                     children: [
                       Image.network(
-                        rest.image ??
-                            'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4',
+                        rest.image.isEmpty
+                            ? 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4'
+                            : rest.image,
                         fit: BoxFit.cover,
                       ),
                       // 頂部漸層陰影，確保關閉按鈕清晰
@@ -133,7 +129,7 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                         children: [
                           Expanded(
                             child: Text(
-                              rest.name ?? 'Unknown Restaurant',
+                              rest.name,
                               style: const TextStyle(
                                 fontSize: 26,
                                 fontWeight: FontWeight.w900,
@@ -150,7 +146,7 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '${rest.rating ?? 0.0}',
+                                rest.rating.toStringAsFixed(1),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w900,
@@ -173,7 +169,7 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${rest.deliveryTime ?? "20 min"} • 外送限額 ${rest.priceRange ?? "\$\$"}',
+                            '${rest.deliveryTime} • 外送限額 ${rest.priceRange}',
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 13,
@@ -188,9 +184,9 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            rest.runtimeType.toString().contains('Restaurant')
-                                ? '${rest.distance}'
-                                : '0.5km',
+                            rest.computedDistance == null
+                                ? rest.distance
+                                : '${rest.computedDistance!.toStringAsFixed(1)}km',
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 13,
@@ -324,7 +320,7 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
     List<String> highlights,
     List<String> warnings,
   ) {
-    final int score = rest.wiseScore ?? 0;
+    final int score = rest.wiseScore;
     Color scoreColor = Colors.green;
     if (score < 60)
       scoreColor = Colors.red;
@@ -402,7 +398,7 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
         ),
         const SizedBox(height: 8),
         Text(
-          rest.wiseReason ?? '暫無 AI 分析推薦理由。',
+          rest.wiseReason.isEmpty ? '暫無 AI 分析推薦理由。' : rest.wiseReason,
           style: const TextStyle(
             fontSize: 14,
             color: Color(0xFF475569),

@@ -12,8 +12,6 @@ import '../services/google_places_service.dart';
 
 import 'package:geolocator/geolocator.dart';
 
-import 'package:flutter/foundation.dart';
-
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -235,18 +233,14 @@ class FirebaseProvider with ChangeNotifier {
 
   Future<List<Restaurant>> fetchNearbyRestaurants() async {
     try {
-      // 取得定位
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-      );
+      final Position position = await _getCurrentPosition();
 
-      // 呼叫 Google Places API
       final results = await _googlePlacesService.getNearbyRestaurants(
         position.latitude,
         position.longitude,
       );
 
-      return List<Restaurant>.from(results);
+      return _withDistance(results, position);
     } catch (e) {
       debugPrint("Google Places error: $e");
       return [];
@@ -413,42 +407,23 @@ class FirebaseProvider with ChangeNotifier {
     double dailyBudget,
   ) async {
     try {
-      // 1. 改成從 Google Places 來
-      List<Restaurant> list = await fetchNearbyRestaurants();
+      final Position position = await _getCurrentPosition();
+
+      List<Restaurant> list = await _googlePlacesService.getNearbyRestaurants(
+        position.latitude,
+        position.longitude,
+      );
 
       if (list.isEmpty) {
-        // fallback（避免 API 失敗整個掛掉）
         list = List<Restaurant>.from(mockRestaurants);
       }
 
-      bool isOverBudget = todaySpend > dailyBudget;
+      list = _withDistance(list, position);
 
-      // 2. 計算距離
-      // Position position = await Geolocator.getCurrentPosition(
-      //   locationSettings: const LocationSettings(
-      //     accuracy: LocationAccuracy.medium,
-      //   ),
-      // );
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-      );
-
-      for (var r in list) {
-        final distanceKm =
-            Geolocator.distanceBetween(
-              position.latitude,
-              position.longitude,
-              r.lat,
-              r.lng,
-            ) /
-            1000;
-        r.computedDistance = distanceKm;
-      }
-
-      // 3. 排序邏輯（保留你原本智慧排序）
+      final bool isOverBudget = todaySpend > dailyBudget;
       list.sort((a, b) {
-        final scoreA = a.wiseScore - ((a.computedDistance ?? 0) * 2).toInt();
-        final scoreB = b.wiseScore - ((b.computedDistance ?? 0) * 2).toInt();
+        final int scoreA = _restaurantRecommendationScore(a, isOverBudget);
+        final int scoreB = _restaurantRecommendationScore(b, isOverBudget);
 
         return scoreB.compareTo(scoreA);
       });
@@ -457,9 +432,74 @@ class FirebaseProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('餐廳推薦錯誤: $e');
 
-      return List<Restaurant>.from(mockRestaurants)
-        ..sort((a, b) => b.wiseScore.compareTo(a.wiseScore));
+      return List<Restaurant>.from(mockRestaurants)..sort(
+        (a, b) => _restaurantRecommendationScore(b, todaySpend > dailyBudget)
+            .compareTo(
+              _restaurantRecommendationScore(a, todaySpend > dailyBudget),
+            ),
+      );
     }
+  }
+
+  Future<Position> _getCurrentPosition() async {
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      throw Exception('定位服務尚未開啟');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw Exception('定位權限被拒絕');
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('定位權限被永久拒絕，請到系統設定開啟');
+    }
+
+    return Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.medium,
+    );
+  }
+
+  List<Restaurant> _withDistance(
+    List<Restaurant> restaurants,
+    Position position,
+  ) {
+    for (final Restaurant restaurant in restaurants) {
+      final double distanceKm =
+          Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            restaurant.lat,
+            restaurant.lng,
+          ) /
+          1000;
+
+      restaurant.computedDistance = distanceKm;
+    }
+
+    return restaurants;
+  }
+
+  int _restaurantRecommendationScore(Restaurant restaurant, bool isOverBudget) {
+    final double distancePenalty = (restaurant.computedDistance ?? 3) * 4;
+    int score = restaurant.wiseScore - distancePenalty.round();
+
+    if (isOverBudget && restaurant.priceRange == r'$') {
+      score += 8;
+    }
+
+    if (restaurant.isHealthy == true) {
+      score += 4;
+    }
+
+    return score;
   }
 
   // List<Restaurant> getSmartRecommendations(

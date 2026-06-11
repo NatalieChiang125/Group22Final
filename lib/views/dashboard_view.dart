@@ -5,9 +5,6 @@ import 'package:provider/provider.dart';
 import '../providers/firebase_provider.dart';
 import '../models/types.dart';
 import 'restaurant_detail.dart';
-import 'ai_chat_dialog.dart';
-import 'record_meal_dialog.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 // class DashboardView extends StatefulWidget {
 //   const DashboardView({super.key});
@@ -786,6 +783,7 @@ class DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<DashboardView> {
   List<Restaurant> _restaurants = [];
   bool _loadingRestaurants = true;
+  String? _restaurantError;
 
   @override
   void initState() {
@@ -793,21 +791,40 @@ class _DashboardViewState extends State<DashboardView> {
     _loadRestaurants();
   }
 
-  Future<void> _loadRestaurants() async {
+  Future<void> _loadRestaurants({
+    double todaySpend = 0,
+    double dailyBudget = 500,
+  }) async {
     final provider = Provider.of<FirebaseProvider>(context, listen: false);
 
+    setState(() {
+      _loadingRestaurants = true;
+      _restaurantError = null;
+    });
+
     try {
-      final result = await provider.fetchNearbyRestaurants(); //改成這行顯示不了餐廳
-      //final result = await provider.getSortedRestaurants(0.0, 15000.0);//改成這行只會顯示假餐廳
+      final result = await provider.getSortedRestaurants(
+        todaySpend,
+        dailyBudget,
+      );
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _restaurants = result;
         _loadingRestaurants = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _restaurants = [];
         _loadingRestaurants = false;
+        _restaurantError = e.toString();
       });
     }
   }
@@ -823,13 +840,13 @@ class _DashboardViewState extends State<DashboardView> {
       );
     }
 
-    final userProfile = firebaseProvider.userProfile ?? <String, dynamic>{};
-    final records = firebaseProvider.records ?? [];
+    final Map<String, dynamic> userProfile =
+        firebaseProvider.userProfile ?? <String, dynamic>{};
+    final records = firebaseProvider.records;
 
     double monthlyLimit = 15000.0;
 
-    if (userProfile is Map &&
-        userProfile['budget'] is Map &&
+    if (userProfile['budget'] is Map &&
         userProfile['budget']['monthlyLimit'] != null) {
       monthlyLimit = (userProfile['budget']['monthlyLimit']).toDouble();
     }
@@ -851,6 +868,7 @@ class _DashboardViewState extends State<DashboardView> {
     }
 
     //final dailyBudget = monthlyLimit / 30;
+    final dailyBudget = monthlyLimit / 30;
     final remaining = monthlyLimit - monthlySpend;
 
     final progress = monthlyLimit > 0
@@ -930,13 +948,21 @@ class _DashboardViewState extends State<DashboardView> {
                 "附近推薦餐廳",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 4),
+              Text(
+                "依距離、評分、價格與今日預算排序",
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
 
               const SizedBox(height: 12),
 
               if (_loadingRestaurants)
                 const Center(child: CircularProgressIndicator())
               else if (_restaurants.isEmpty)
-                const Center(child: Text("找不到附近餐廳"))
+                _buildRestaurantEmptyState(todaySpend, dailyBudget)
               else
                 ListView.builder(
                   shrinkWrap: true,
@@ -945,29 +971,242 @@ class _DashboardViewState extends State<DashboardView> {
                   itemBuilder: (context, index) {
                     final r = _restaurants[index];
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        title: Text(r.name ?? ''),
-                        subtitle: Text("${r.categories?.join(" • ") ?? ""}"),
-                        trailing: Text("⭐ ${r.rating}"),
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            builder: (_) => RestaurantDetail(
-                              restaurant: r,
-                              onClose: () => Navigator.pop(context),
-                            ),
-                          );
-                        },
-                      ),
-                    );
+                    return _buildRestaurantCard(context, r);
                   },
                 ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _loadingRestaurants
+                      ? null
+                      : () => _loadRestaurants(
+                          todaySpend: todaySpend,
+                          dailyBudget: dailyBudget,
+                        ),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('重新整理附近餐廳'),
+                ),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRestaurantCard(BuildContext context, Restaurant restaurant) {
+    final Color scoreColor = restaurant.wiseScore >= 90
+        ? const Color(0xFF059669)
+        : restaurant.wiseScore >= 75
+        ? const Color(0xFFD97706)
+        : const Color(0xFFDC2626);
+    final String distance = restaurant.computedDistance == null
+        ? restaurant.distance
+        : '${restaurant.computedDistance!.toStringAsFixed(1)} km';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () {
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (sheetContext) => RestaurantDetail(
+              restaurant: restaurant,
+              onClose: () => Navigator.pop(sheetContext),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: restaurant.image.isEmpty
+                    ? Container(
+                        width: 84,
+                        height: 84,
+                        color: const Color(0xFFE2E8F0),
+                        child: const Icon(
+                          Icons.restaurant,
+                          color: Color(0xFF64748B),
+                        ),
+                      )
+                    : Image.network(
+                        restaurant.image,
+                        width: 84,
+                        height: 84,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 84,
+                          height: 84,
+                          color: const Color(0xFFE2E8F0),
+                          child: const Icon(
+                            Icons.restaurant,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      restaurant.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${restaurant.categories.join(' • ')} · ${restaurant.priceRange} · $distance',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children:
+                          restaurant.nutritionalHighlights
+                              ?.take(2)
+                              .map(
+                                (tag) => _buildTag(
+                                  tag,
+                                  const Color(0xFFECFDF5),
+                                  const Color(0xFF047857),
+                                ),
+                              )
+                              .toList() ??
+                          [],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.star_rounded,
+                        size: 17,
+                        color: Color(0xFFF59E0B),
+                      ),
+                      Text(
+                        restaurant.rating.toStringAsFixed(1),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: scoreColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      '${restaurant.wiseScore}',
+                      style: TextStyle(
+                        color: scoreColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTag(String text, Color background, Color foreground) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRestaurantEmptyState(double todaySpend, double dailyBudget) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.location_off_outlined,
+            size: 36,
+            color: Color(0xFF94A3B8),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _restaurantError == null ? '找不到附近餐廳' : '附近餐廳載入失敗',
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _restaurantError ?? '請確認定位權限、Google Places API key 與網路狀態。',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => _loadRestaurants(
+              todaySpend: todaySpend,
+              dailyBudget: dailyBudget,
+            ),
+            icon: const Icon(Icons.my_location_rounded),
+            label: const Text('再試一次'),
+          ),
+        ],
       ),
     );
   }
