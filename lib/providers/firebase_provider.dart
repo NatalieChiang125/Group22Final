@@ -540,8 +540,8 @@ class FirebaseProvider with ChangeNotifier {
 
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-      ).timeout(const Duration(seconds: 4));
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 8));
     } catch (e) {
       debugPrint('[WiseBite] 定位獲取逾時或失敗 ($e)，自動切換至預設座標進行 API 推薦');
       return _getFallbackPosition();
