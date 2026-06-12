@@ -11,7 +11,7 @@ class AIService {
   AIService({required String apiKey})
     : _model = GenerativeModel(
         model: 'gemini-2.5-flash-lite', // 在 Flutter 行動端穩定支援多模態的型號
-        apiKey: apiKey,
+        apiKey: 'AQ.Ab8RN6Lf-EX0MMItWISiCfrG0CX-Re1uV5uetVskpW7O4TYASA',
       );
 
   // 1. 分析食物照片

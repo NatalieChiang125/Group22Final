@@ -18,15 +18,24 @@ class GooglePlacesService {
     int radiusMeters = 2000,
     String keyword = 'restaurant',
   }) async {
-    final Uri url =
-        Uri.https('maps.googleapis.com', '/maps/api/place/nearbysearch/json', {
-          'location': '$lat,$lng',
-          'radius': radiusMeters.toString(),
-          'type': 'restaurant',
-          'keyword': keyword,
-          'language': 'zh-TW',
-          'key': apiKey,
-        });
+    // final Uri url =
+    //     Uri.https('maps.googleapis.com', '/maps/api/place/nearbysearch/json', {
+    //       'location': '$lat,$lng',
+    //       'radius': radiusMeters.toString(),
+    //       'type': 'restaurant',
+    //       'keyword': keyword,
+    //       'language': 'zh-TW',
+    //       'key': apiKey,
+    //     });
+
+    // final response = await http.get(url);
+    const String functionUrl =
+    //'https://us-central1-wisebite.cloudfunctions.net/getRestaurants';
+    'https://getrestaurants-u6btwhutza-uc.a.run.app';
+
+    final Uri url = Uri.parse(
+      '$functionUrl?lat=$lat&lng=$lng',
+    );
 
     final response = await http.get(url);
 
@@ -47,6 +56,10 @@ class GooglePlacesService {
 
     return results.map<Restaurant>((r) {
       final Map<String, dynamic> place = Map<String, dynamic>.from(r as Map);
+      print('====================');
+      print('PLACE DATA: $place');
+      print('PHOTO URL: ${place['photoUrl']}');
+      print('====================');
       final Map<String, dynamic> geometry = Map<String, dynamic>.from(
         place['geometry'] as Map? ?? {},
       );
@@ -78,12 +91,13 @@ class GooglePlacesService {
         id: placeId,
         name: name,
 
-        image: place['photos'] != null
-            ? 'https://maps.googleapis.com/maps/api/place/photo'
-                  '?maxwidth=400'
-                  '&photoreference=${place['photos'][0]['photo_reference']}'
-                  '&key=$apiKey'
-            : '',
+        // image: place['photos'] != null
+        //     ? 'https://maps.googleapis.com/maps/api/place/photo'
+        //           '?maxwidth=400'
+        //           '&photoreference=${place['photos'][0]['photo_reference']}'
+        //           '&key=$apiKey'
+        //     : '',
+        image: place['photoUrl'] ?? '',
 
         rating: rating,
         distance: '',

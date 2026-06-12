@@ -1,32 +1,83 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
-
 import {setGlobalOptions} from "firebase-functions";
-import {onRequest} from "firebase-functions/https";
+import {onRequest} from "firebase-functions/v2/https";
+import axios from "axios";
 import * as logger from "firebase-functions/logger";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
-
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
-
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+setGlobalOptions({
+  maxInstances: 10,
+});
+const GOOGLE_MAPS_API_KEY = "AIzaSyCeH7N4mIZsgqfseaNlT9IVFEiFszVaZBQ";
+interface PlacePhoto {
+  photo_reference: string;
+}
+interface Place {
+  place_id?: string;
+  name?: string;
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  types?: string[];
+  photos?: PlacePhoto[];
+  opening_hours?: {
+    open_now?: boolean;
+  };
+  geometry?: {
+    location?: {
+      lat: number;
+      lng: number;
+    };
+  };
+}
+export const getRestaurants = onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+  try {
+    const lng = req.query.lng;
+    const lat = req.query.lat;
+    if (!lat || !lng) {
+      res.status(400).json({error: "Missing latitude or longitude"});
+      return;
+    }
+    const response = await axios.get(
+      "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+      {
+        params: {
+          location: `${lat},${lng}`,
+          radius: 2000,
+          type: "restaurant",
+          keyword: "restaurant",
+          language: "zh-TW",
+          key: GOOGLE_MAPS_API_KEY,
+        },
+      }
+    );
+    // res.json(response.data);
+    const results = (response.data.results || []).map((place: Place) => {
+      const photoRef = place.photos?.[0]?.photo_reference;
+      const photoUrl = photoRef != null ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${encodeURIComponent(photoRef)}&key=${GOOGLE_MAPS_API_KEY}` : null;
+      return {
+        placeId: place.place_id ?? "",
+        name: place.name ?? "Unknown",
+        rating: place.rating ?? 0,
+        userRatingsTotal: place.user_ratings_total ?? 0,
+        priceLevel: place.price_level ?? null,
+        location: place.geometry?.location ?? null,
+        photoUrl: photoUrl,
+        types: place.types ?? [],
+        openNow: place.opening_hours?.open_now ?? null,
+      };
+    });
+    res.status(200).json({
+      status: "OK",
+      results,
+    });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({error: "Google API failed"});
+  }
+});
