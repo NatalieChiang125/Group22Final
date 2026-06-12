@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 // 💡 優化：移除本地重複定義的 Restaurant Class，統一引入全域型態
 import 'package:wisebite/models/types.dart';
+import 'package:wisebite/views/universal_image.dart';
 
 class RestaurantDetail extends StatefulWidget {
   // 💡 這裡的 Restaurant 將直接對齊 mock_data.dart 與 types.dart 的完整結構
@@ -63,12 +64,13 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(
-                        rest.image.isEmpty
+                      UniversalImage(
+                        imageUrl: rest.image.isEmpty
                             ? 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4'
                             : rest.image,
                         fit: BoxFit.cover,
                       ),
+
                       // 頂部漸層陰影，確保關閉按鈕清晰
                       Container(
                         decoration: BoxDecoration(

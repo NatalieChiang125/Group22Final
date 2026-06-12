@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/firebase_provider.dart';
 import '../models/types.dart';
 import 'restaurant_detail.dart';
+import 'package:wisebite/views/universal_image.dart';
 
 // class DashboardView extends StatefulWidget {
 //   const DashboardView({super.key});
@@ -1041,20 +1042,12 @@ class _DashboardViewState extends State<DashboardView> {
                           color: Color(0xFF64748B),
                         ),
                       )
-                    : Image.network(
-                        restaurant.image,
+                    : UniversalImage(
+                        // 💡 優化：改用支援 Web CORS 的 UniversalImage
+                        imageUrl: restaurant.image,
                         width: 84,
                         height: 84,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 84,
-                          height: 84,
-                          color: const Color(0xFFE2E8F0),
-                          child: const Icon(
-                            Icons.restaurant,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
                       ),
               ),
               const SizedBox(width: 14),
