@@ -239,7 +239,61 @@ class _DashboardViewState extends State<DashboardView> {
         ? restaurant.distance
         : '${restaurant.computedDistance!.toStringAsFixed(1)} km';
     final String priceRange = restaurant.priceRange;
+    double estCost = 0.0;
+    if (restaurant.menuItems != null && restaurant.menuItems!.isNotEmpty) {
+      final allItems = restaurant.menuItems!
+          .expand((category) => category.items ?? [])
+          .toList();
 
+      if (allItems.isNotEmpty) {
+        double total = 0.0;
+        int validItemsCount = 0;
+
+        for (var item in allItems) {
+          if (item.price != null) {
+            // 1. 先把 price 轉成字串
+            String priceStr = item.price.toString();
+
+            // 2. 拔掉任何可能干擾解析的字元（例如有些 AI 會手癢噴出 "$150" 或 "150元"）
+            priceStr = priceStr.replaceAll('\$', '').replaceAll('元', '').trim();
+
+            // 3. 嘗試解析成數字
+            final parsedPrice = double.tryParse(priceStr);
+
+            // 4. 如果成功解析成數字（不是 "價格未知"），才納入平均花費計算
+            if (parsedPrice != null) {
+              total += parsedPrice;
+              validItemsCount++;
+            }
+          }
+        }
+
+        // 確保至少有一個有效的價格數字才做平均，避免除以 0
+        if (validItemsCount > 0) {
+          estCost = total / validItemsCount;
+        }
+      }
+    }
+
+    // 保底防線：如果剛好沒這家店的菜單資料，才用級距猜測大概金額
+    if (estCost == 0.0) {
+      if (priceRange.contains('\$\$\$'))
+        estCost = 400.0;
+      else if (priceRange.contains('\$\$'))
+        estCost = 220.0;
+      else
+        estCost = 120.0;
+    }
+
+    // 💡 2. 決定平價/中價位/高價位的文字標籤
+    String priceLabel = '平價';
+    if (priceRange.contains('\$\$\$')) {
+      priceLabel = '高價位';
+    } else if (priceRange.contains('\$\$')) {
+      priceLabel = '中價位';
+    } else {
+      priceLabel = '平價';
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -301,7 +355,7 @@ class _DashboardViewState extends State<DashboardView> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${restaurant.categories.join(' • ')} · $priceRange · $distance',
+                      '${restaurant.categories.join(' • ')} · $distance',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -310,6 +364,17 @@ class _DashboardViewState extends State<DashboardView> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '預估價格:$priceRange \$${estCost.toStringAsFixed(0)}', // 秀出實際算出來的價格
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,

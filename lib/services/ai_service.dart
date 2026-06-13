@@ -203,4 +203,61 @@ $budgetInfo
       throw Exception('Gemini 暫時無法產生下一餐建議');
     }
   }
+
+  Future<List<MenuCategory>> fetchRealMenuFromAI(String restaurantName) async {
+    try {
+      final prompt =
+          '''
+你是一個台灣美食與營養學數據庫。請幫我查詢或精確估算位於台灣新竹清華大學附近的真實餐廳「$restaurantName」的核心招牌菜單品項與價格。
+
+請只回傳 JSON，不要加入 Markdown 標記（例如不要寫 ```json）或任何多餘文字。
+
+格式必須完全符合：
+[
+  {
+    "categoryName": "分類名稱(例如: 熱門主餐、湯品飲品)",
+    "items": [
+      {
+        "name": "真實餐點料理名稱",
+        "price": 120,
+        "calories": 450
+      }
+    ]
+  }
+]
+
+規則：
+1. 請務必貼近該餐廳在真實世界的招牌料理名稱（例如綠野仙蹤就要有舒肥雞餐盒）。
+2. 價格必須符合新竹清大當地的實體店面真實消費水平，不要亂編。
+3. 如果該店真的太冷門找不到，請依據店名類型（例如咖啡廳、小吃店）給予最合理、最具代表性的 3 道料理。
+''';
+
+      debugPrint('WiseBite AI Agent 正透過大數據查詢餐廳真實菜單: $restaurantName');
+
+      // 💡 修正處：將原本的 _model 改回 _model 即可
+      final response = await _model.generateContent(
+        [Content.text(prompt)],
+        generationConfig: GenerationConfig(
+          responseMimeType: 'application/json',
+        ),
+      );
+
+      final String text = response.text ?? '[]';
+      debugPrint('AI 真實菜單回傳：$text');
+
+      final List<dynamic> decoded = jsonDecode(text) as List<dynamic>;
+
+      // 解析並對齊你們 types.dart 的 MenuCategory 結構
+      return decoded.map((cat) {
+        final Map<String, dynamic> catMap = Map<String, dynamic>.from(
+          cat as Map,
+        );
+        return MenuCategory.fromJson(catMap);
+      }).toList();
+    } catch (e, stackTrace) {
+      debugPrint('AI 獲取真實菜單失敗: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      return []; // 失敗時回傳空陣列保底
+    }
+  }
 }

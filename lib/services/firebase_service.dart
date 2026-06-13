@@ -244,9 +244,7 @@ class FirebaseService {
 class SaveMealRecord {
   final int healthScore;
 
-  SaveMealRecord({
-    required this.healthScore,
-  });
+  SaveMealRecord({required this.healthScore});
 }
 
 int calculateUserScore({
@@ -256,9 +254,8 @@ int calculateUserScore({
   if (records.isEmpty) return 0;
 
   // 1. 平均 AI 分數
-  final avg = records
-          .map((e) => e.healthScore)
-          .reduce((a, b) => a + b) /
+  final avg =
+      records.map((e) => e.healthScore).reduce((a, b) => a + b) /
       records.length;
 
   // 2. streak bonus

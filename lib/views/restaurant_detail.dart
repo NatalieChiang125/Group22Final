@@ -486,34 +486,96 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
   }
 
   // 精選選單分頁
-  Widget _buildMenuSection(dynamic rest) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
+  Widget _buildMenuSection(Restaurant rest) {
+    // 💡 1. 收集整家餐廳所有分類下的所有餐點，打平成一個單層的 List
+    final List<MenuItem> allFlattenedItems = [];
+    if (rest.menuItems != null) {
+      for (var category in rest.menuItems!) {
+        if (category.items != null) {
+          allFlattenedItems.addAll(category.items!);
+        }
+      }
+    }
+
+    // 💡 2. 空狀態防禦：如果這家餐廳真的撈不出任何料理，顯示精美提示
+    if (allFlattenedItems.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
           children: [
-            Icon(Icons.restaurant_menu, size: 18, color: Color(0xFF0F172A)),
-            SizedBox(width: 6),
+            Icon(
+              Icons.layers_clear_outlined,
+              size: 40,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 12),
             Text(
-              '當季熱門推薦品項',
+              '暫無精選選單資料',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w900,
-                color: Color(0xFF0F172A),
+                color: Colors.grey.shade600,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        // 渲染精選餐點卡片 (優化列表)
+      );
+    }
+
+    // 💡 3. 核心限流：利用 .take(3) 嚴格限制整家餐廳總共只抓前 3 筆餐點
+    final List<MenuItem> finalDisplayItems = allFlattenedItems.take(3).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 統一的大標題（既然打平了，我們就用一個精美的總標題帶過）
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.restaurant_menu, size: 16, color: Color(0xFF0F172A)),
+              const SizedBox(width: 6),
+              Text(
+                '主廚精選推薦品項',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 渲染總共 3 道的精選餐點列表
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: 3, // 預設展示 3 筆 Mock 精選
+          itemCount: finalDisplayItems.length,
           itemBuilder: (context, index) {
-            final mockItemNames = ['精準高蛋白低卡便當', '地中海舒肥雞胸沙拉', '元氣燕麥輕食燕麥組'];
-            final mockPrices = ['\$140', '\$125', '\$95'];
-            final mockCalories = ['520 kcal', '410 kcal', '350 kcal'];
+            final item = finalDisplayItems[index];
+
+            // 安全型別轉換卡路里文字
+            final double? rawCalories = item.calories is num
+                ? (item.calories as num).toDouble()
+                : double.tryParse(item.calories?.toString() ?? '');
+
+            final String caloriesText = rawCalories != null && rawCalories > 0
+                ? '${rawCalories.toStringAsFixed(0)} kcal'
+                : '營養素估算中';
+
+            // 處理價格字串與防呆美化
+            final String priceText =
+                item.price != null && item.price.toString().isNotEmpty
+                ? (item.price.toString().contains('\$')
+                      ? item.price.toString()
+                      : '\$${item.price}')
+                : '\$ --';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -529,19 +591,21 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // 料理名稱
                         Text(
-                          mockItemNames[index],
+                          item.name ?? '未命名品項',
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
                             color: Color(0xFF1E293B),
                           ),
                         ),
                         const SizedBox(height: 4),
+                        // 卡路里熱量
                         Text(
-                          mockCalories[index],
+                          caloriesText,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey.shade500,
                             fontWeight: FontWeight.bold,
                           ),
@@ -549,10 +613,11 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                       ],
                     ),
                   ),
+                  // 真實價格
                   Text(
-                    mockPrices[index],
+                    priceText,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
                       color: Color(0xFF059669),
                     ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/types.dart';
 import 'package:geolocator/geolocator.dart';
+import 'ai_service.dart';
 
 class GooglePlacesService {
   static const String _fallbackApiKey =
@@ -15,7 +16,8 @@ class GooglePlacesService {
 
   Future<List<Restaurant>> getNearbyRestaurants(
     double lat,
-    double lng, {
+    double lng,
+    AIService aiService, { // 💡 多傳入這個
     int radiusMeters = 2000,
     String keyword = 'restaurant',
   }) async {
@@ -31,12 +33,10 @@ class GooglePlacesService {
 
     // final response = await http.get(url);
     const String functionUrl =
-    //'https://us-central1-wisebite.cloudfunctions.net/getRestaurants';
-    'https://getrestaurants-u6btwhutza-uc.a.run.app';
+        //'https://us-central1-wisebite.cloudfunctions.net/getRestaurants';
+        'https://getrestaurants-u6btwhutza-uc.a.run.app';
 
-    final Uri url = Uri.parse(
-      '$functionUrl?lat=$lat&lng=$lng',
-    );
+    final Uri url = Uri.parse('$functionUrl?lat=$lat&lng=$lng');
 
     final response = await http.get(url);
 
@@ -55,7 +55,8 @@ class GooglePlacesService {
 
     final List<dynamic> results = data['results'] as List<dynamic>? ?? [];
 
-    return results.map<Restaurant>((r) {
+    final List<Future<Restaurant>>
+    restaurantFutures = results.map<Future<Restaurant>>((r) async {
       final Map<String, dynamic> place = Map<String, dynamic>.from(r as Map);
       print('====================');
       print('PLACE DATA: $place');
@@ -93,6 +94,10 @@ class GooglePlacesService {
         types: rawTypes,
       );
 
+      final List<MenuCategory> realMenu = await aiService.fetchRealMenuFromAI(
+        name,
+      );
+
       return Restaurant(
         id: placeId,
         name: name,
@@ -126,21 +131,19 @@ class GooglePlacesService {
         menuUrl:
             'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(name)}&query_place_id=$placeId',
         menuPhotos: [],
-        menuItems: [],
+        menuItems: realMenu,
 
         isHealthy: rating >= 4.2,
 
         lat: placeLat,
         lng: placeLng,
 
-        computedDistance: Geolocator.distanceBetween(
-                            lat,
-                            lng,
-                            placeLat,
-                            placeLng,
-                          ) / 1000,
+        computedDistance:
+            Geolocator.distanceBetween(lat, lng, placeLat, placeLng) / 1000,
       );
     }).toList();
+
+    return await Future.wait(restaurantFutures);
   }
 
   /// 把 Google price_level (0~4) 轉成 \$ 字符

@@ -239,23 +239,25 @@ class Restaurant {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'image': image,
-        'rating': rating,
-        'distance': distance,
-        'wiseScore': wiseScore,
-        'wiseReason': wiseReason,
-        if (nutritionalHighlights != null) 'nutritionalHighlights': nutritionalHighlights,
-        if (warnings != null) 'warnings': warnings,
-        'deliveryTime': deliveryTime,
-        'categories': categories,
-        'priceRange': priceRange,
-        if (menuUrl != null) 'menuUrl': menuUrl,
-        if (menuPhotos != null) 'menuPhotos': menuPhotos,
-        if (menuItems != null) 'menuItems': menuItems!.map((e) => e.toJson()).toList(),
-        if (isHealthy != null) 'isHealthy': isHealthy,
-      };
+    'id': id,
+    'name': name,
+    'image': image,
+    'rating': rating,
+    'distance': distance,
+    'wiseScore': wiseScore,
+    'wiseReason': wiseReason,
+    if (nutritionalHighlights != null)
+      'nutritionalHighlights': nutritionalHighlights,
+    if (warnings != null) 'warnings': warnings,
+    'deliveryTime': deliveryTime,
+    'categories': categories,
+    'priceRange': priceRange,
+    if (menuUrl != null) 'menuUrl': menuUrl,
+    if (menuPhotos != null) 'menuPhotos': menuPhotos,
+    if (menuItems != null)
+      'menuItems': menuItems!.map((e) => e.toJson()).toList(),
+    if (isHealthy != null) 'isHealthy': isHealthy,
+  };
 }
 
 class Category {

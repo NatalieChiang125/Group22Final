@@ -13,6 +13,7 @@ import '../models/mock_data.dart'; // 引入靜態資料池
 import '../services/google_places_service.dart';
 
 import 'package:geolocator/geolocator.dart';
+import '../services/ai_service.dart';
 
 List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
   final List<Restaurant> list = args['list'] as List<Restaurant>;
@@ -88,6 +89,9 @@ class FirebaseProvider with ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseService _firebaseService = FirebaseService();
   final GooglePlacesService _googlePlacesService = GooglePlacesService();
+
+  final AIService _aiService = AIService(apiKey: '');
+
   User? _user;
   Map<String, dynamic>? _userProfileJson;
 
@@ -120,9 +124,8 @@ class FirebaseProvider with ChangeNotifier {
   int get userScore {
     if (_records.isEmpty) return 0;
 
-    final avg = _records
-            .map((r) => r.healthScore)
-            .reduce((a, b) => a + b) /
+    final avg =
+        _records.map((r) => r.healthScore).reduce((a, b) => a + b) /
         _records.length;
 
     final streakBonus = userStreak * 5;
@@ -328,7 +331,9 @@ class FirebaseProvider with ChangeNotifier {
       final results = await _googlePlacesService.getNearbyRestaurants(
         position.latitude,
         position.longitude,
+        _aiService,
       );
+
       if (results.isEmpty) return [];
 
       final processedList = await compute(_calculateDistanceOnlyInBackground, {
@@ -506,7 +511,11 @@ class FirebaseProvider with ChangeNotifier {
       final Position position = await _getCurrentPosition();
 
       List<Restaurant> list = await _googlePlacesService
-          .getNearbyRestaurants(position.latitude, position.longitude)
+          .getNearbyRestaurants(
+            position.latitude,
+            position.longitude,
+            _aiService,
+          )
           .timeout(const Duration(seconds: 5));
 
       if (list.isEmpty) {
