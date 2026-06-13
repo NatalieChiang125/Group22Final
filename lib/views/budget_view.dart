@@ -3,9 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:math' as math;
 import 'package:wisebite/models/types.dart';
 
-// --- 模擬從 ../types 引入的資料結構 ---
 
-// ----------------------------------
 
 class BudgetView extends StatefulWidget {
   final BudgetData budget;

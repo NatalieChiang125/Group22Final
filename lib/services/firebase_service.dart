@@ -240,3 +240,29 @@ class FirebaseService {
     }
   }
 }
+
+class SaveMealRecord {
+  final int healthScore;
+
+  SaveMealRecord({
+    required this.healthScore,
+  });
+}
+
+int calculateUserScore({
+  required List<SaveMealRecord> records,
+  required int streakDays,
+}) {
+  if (records.isEmpty) return 0;
+
+  // 1. 平均 AI 分數
+  final avg = records
+          .map((e) => e.healthScore)
+          .reduce((a, b) => a + b) /
+      records.length;
+
+  // 2. streak bonus
+  final streakBonus = streakDays * 5;
+
+  return (avg + streakBonus).round();
+}

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/types.dart';
+import 'package:geolocator/geolocator.dart';
 
 class GooglePlacesService {
   static const String _fallbackApiKey =
@@ -59,12 +60,14 @@ class GooglePlacesService {
       print('====================');
       print('PLACE DATA: $place');
       print('PHOTO URL: ${place['photoUrl']}');
+      print('PRICE: ${place['priceLevel']}');
       print('====================');
-      final Map<String, dynamic> geometry = Map<String, dynamic>.from(
-        place['geometry'] as Map? ?? {},
-      );
+      // final Map<String, dynamic> geometry = Map<String, dynamic>.from(
+      //   place['geometry'] as Map? ?? {},
+      // );
       final Map<String, dynamic> location = Map<String, dynamic>.from(
-        geometry['location'] as Map? ?? {},
+        //geometry['location'] as Map? ?? {},
+        place['location'] ?? {},
       );
 
       final String placeId = place['place_id']?.toString() ?? '';
@@ -77,12 +80,15 @@ class GooglePlacesService {
       final List<String> rawTypes = (place['types'] as List? ?? [])
           .map((type) => type.toString())
           .toList();
+      final int priceLevel = place['price_level'] is num
+          ? (place['price_level'] as num).toInt()
+          : -1;
       final double placeLat = (location['lat'] as num? ?? lat).toDouble();
       final double placeLng = (location['lng'] as num? ?? lng).toDouble();
       final int wiseScore = _buildWiseScore(
         rating: rating,
         userRatingsTotal: userRatingsTotal,
-        priceLevel: place['price_level'],
+        priceLevel: priceLevel,
         isOpen: isOpen,
         types: rawTypes,
       );
@@ -105,17 +111,17 @@ class GooglePlacesService {
 
         wiseReason: _buildWiseReason(
           rating: rating,
-          priceLevel: place['price_level'],
+          priceLevel: priceLevel,
           isOpen: isOpen,
           types: rawTypes,
         ),
         nutritionalHighlights: _buildHighlights(rawTypes, isOpen),
-        warnings: _buildWarnings(rawTypes, place['price_level']),
+        warnings: _buildWarnings(rawTypes, priceLevel),
 
         deliveryTime: isOpen ? '營業中' : '可能未營業',
         categories: _mapTypes(rawTypes),
 
-        priceRange: _mapPriceLevel(place['price_level']),
+        priceRange: _mapPriceLevel(priceLevel),
 
         menuUrl:
             'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(name)}&query_place_id=$placeId',
@@ -127,28 +133,41 @@ class GooglePlacesService {
         lat: placeLat,
         lng: placeLng,
 
-        computedDistance: null,
+        computedDistance: Geolocator.distanceBetween(
+                            lat,
+                            lng,
+                            placeLat,
+                            placeLng,
+                          ) / 1000,
       );
     }).toList();
   }
 
   /// 把 Google price_level (0~4) 轉成 \$ 字符
-  String _mapPriceLevel(dynamic level) {
-    if (level == null) return '\$';
+  // String _mapPriceLevel(dynamic level) {
+  //   if (level == null) return '未提供價格資訊';
 
-    switch (level) {
-      case 0:
-      case 1:
-        return '\$';
-      case 2:
-        return '\$\$';
-      case 3:
-        return '\$\$\$';
-      case 4:
-        return '\$\$\$\$';
-      default:
-        return '\$';
-    }
+  //   switch (level) {
+  //     case 0:
+  //     case 1:
+  //       return '\$';
+  //     case 2:
+  //       return '\$\$';
+  //     case 3:
+  //       return '\$\$\$';
+  //     case 4:
+  //       return '\$\$\$\$';
+  //     default:
+  //       return '\$';
+  //   }
+  // }
+  String _mapPriceLevel(dynamic level) {
+    final intLevel = int.tryParse(level.toString());
+
+    if (intLevel == null) return '未提供價格資訊';
+    print('map input = $level (${level.runtimeType})');
+
+    return '\$' * intLevel;
   }
 
   int _buildWiseScore({

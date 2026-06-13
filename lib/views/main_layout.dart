@@ -26,13 +26,16 @@ class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
   // ================= 💰 預算模組狀態 =================
-  double _currentSpending = 1120.0;
+  late double _currentSpending=double.parse('0.0');
   late BudgetData _budgetData;
 
   // ================= 👥 社交模組狀態 =================
-  final String _myShareId = 'WISEBITE99';
-  int _myScore = 84;
-  int _myStreak = 12;
+  //final String _myShareId = 'WISEBITE99';
+  // String get _myShareId =>
+  //   Provider.of<FirebaseProvider>(context, listen: false)
+  //       .userProfile?['shareId'] ?? 'UNKNOWN';
+  // late int _myScore=0;
+  // late int _myStreak=0;
 
   late List<FriendProfile> _friendsList;
 
@@ -64,77 +67,79 @@ class _MainLayoutState extends State<MainLayout> {
     _budgetData = BudgetData(
       monthlyLimit: 12000.0,
       history: [
-        BudgetPeriod(
-          period: 'Apr 2026',
-          limit: 12000,
-          spent: 10500,
-          type: 'monthly',
-        ),
-        BudgetPeriod(
-          period: 'Mar 2026',
-          limit: 10000,
-          spent: 11200,
-          type: 'monthly',
-        ),
-        BudgetPeriod(
-          period: 'Feb 2026',
-          limit: 10000,
-          spent: 8900,
-          type: 'monthly',
-        ),
+        // BudgetPeriod(
+        //   period: 'Apr 2026',
+        //   limit: 12000,
+        //   spent: 10500,
+        //   type: 'monthly',
+        // ),
+        // BudgetPeriod(
+        //   period: 'Mar 2026',
+        //   limit: 10000,
+        //   spent: 11200,
+        //   type: 'monthly',
+        // ),
+        // BudgetPeriod(
+        //   period: 'Feb 2026',
+        //   limit: 10000,
+        //   spent: 8900,
+        //   type: 'monthly',
+        // ),
       ],
     );
 
     // 初始化好友名單
     _friendsList = [
-      FriendProfile(
-        uid: 'user_01',
-        displayName: 'Alex Carter',
-        score: 92,
-        shareId: 'HEALTHY88',
-        achievementsCount: 24,
-      ),
-      FriendProfile(
-        uid: 'user_02',
-        displayName: 'Sarah Jenkins',
-        score: 75,
-        shareId: 'FITSCOUT',
-        achievementsCount: 8,
-      ),
-      FriendProfile(
-        uid: 'user_03',
-        displayName: 'Emma Watson',
-        score: 58,
-        shareId: 'AVOCADO22',
-        achievementsCount: 3,
-      ),
+      // FriendProfile(
+      //   uid: 'user_01',
+      //   displayName: 'Alex Carter',
+      //   score: 92,
+      //   shareId: 'HEALTHY88',
+      //   achievementsCount: 24,
+      // ),
+      // FriendProfile(
+      //   uid: 'user_02',
+      //   displayName: 'Sarah Jenkins',
+      //   score: 75,
+      //   shareId: 'FITSCOUT',
+      //   achievementsCount: 8,
+      // ),
+      // FriendProfile(
+      //   uid: 'user_03',
+      //   displayName: 'Emma Watson',
+      //   score: 58,
+      //   shareId: 'AVOCADO22',
+      //   achievementsCount: 3,
+      // ),
     ];
 
     // 初始化 Analysis 頁面的每日營養目標
+    final goals = Nutrients(
+      calories: 2000,
+      protein: 120,
+      carbs: 250,
+      fat: 65,
+      fiber: 25,
+      fruit: 3,
+    );
+    final current = Nutrients(
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: 0,
+      fruit: 0,
+    );
     _userStats = UserStats(
-      goals: Nutrients(
-        calories: 2000,
-        protein: 120,
-        carbs: 250,
-        fat: 65,
-        fiber: 25,
-        fruit: 3,
-      ),
-      current: Nutrients(
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        fiber: 0,
-        fruit: 0,
-      ),
+      goals: goals,
+      current: current,
       remaining: Nutrients(
-        calories: 2000,
-        protein: 120,
-        carbs: 250,
-        fat: 65,
-        fiber: 25,
-        fruit: 3,
+        calories: goals.calories - current.calories,
+        protein: goals.protein - current.protein,
+        carbs: goals.carbs - current.carbs,
+        fat: goals.fat - current.fat,
+        fiber: goals.fiber - current.fiber,
+        fruit: (goals.fruit ?? 0) - (current.fruit ?? 0),
       ),
     );
   }
@@ -146,6 +151,42 @@ class _MainLayoutState extends State<MainLayout> {
     const SizedBox(), // Index 3 -> SocialView
     const SizedBox(), // Index 4 -> ProfileView
   ];
+
+  // ================= STREAK =================
+  int _calculateStreak(List<MealRecord> records) {
+    if (records.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final recordDates = records.map((record) {
+      final d = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      return DateTime(d.year, d.month, d.day);
+    }).toSet();
+
+    int streak = 0;
+    DateTime checkDate = today;
+
+    while (recordDates.contains(checkDate)) {
+      streak++;
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  // ================= SCORE =================
+  int _calculateScore(List<MealRecord> records, int streak) {
+    if (records.isEmpty) return streak * 5;
+
+    final avg = records
+            .map((e) => e.healthScore)
+            .reduce((a, b) => a + b) /
+        records.length;
+
+    return (avg + streak * 5).round();
+  }
+
 
   void _onTabSelected(int index) {
     setState(() {
@@ -190,9 +231,13 @@ class _MainLayoutState extends State<MainLayout> {
     final FirebaseProvider firebaseProvider = Provider.of<FirebaseProvider>(
       context,
     );
+    
 
     // 這裡改成讀取 Firestore 即時資料，不再使用本地假資料。
     final List<MealRecord> firebaseRecords = firebaseProvider.records;
+
+    final int streak = _calculateStreak(firebaseRecords);
+    final int score = _calculateScore(firebaseRecords, streak);
 
     final List<Widget> displayPages = List<Widget>.from(_staticPages);
 
@@ -250,11 +295,29 @@ class _MainLayoutState extends State<MainLayout> {
 
     // 注入社交排行視圖
     displayPages[3] = SocialView(
-      userShareId: _myShareId,
-      friends: _friendsList,
-      userScore: _myScore,
-      userStreak: _myStreak,
-      onAddFriend: _handleOnAddFriend,
+      userShareId: firebaseProvider.userProfile?['shareId'] ?? 'UNKNOWN',
+      //friends: _friendsList,
+      friends: (firebaseProvider.userProfile?['friends'] ?? [])
+          .map<FriendProfile>((f) => FriendProfile(
+                uid: f['uid'],
+                displayName: f['displayName'],
+                score: f['score'],
+                shareId: f['shareId'],
+                achievementsCount: f['achievementsCount'] ?? 0,
+              ))
+          .toList(),
+      // userScore: score,
+      // userStreak: streak,
+      //onAddFriend: _handleOnAddFriend,
+      onAddFriend: (shareId) async {
+        await firebaseProvider.addFriendByShareId(shareId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Added friend: $shareId')),
+          );
+        }
+      },
     );
 
     // Profile streak 也改用 Firebase 餐點紀錄

@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:wisebite/models/types.dart';
+import 'package:wisebite/providers/firebase_provider.dart';
 
 class SocialView extends StatefulWidget {
   final String userShareId;
   final List<FriendProfile> friends;
-  final int userScore;
-  final int userStreak;
+  // final int userScore;
+  // final int userStreak;
+  //final List<MealRecord> userRecords;
+  //final int userStreak;
   final Function(String) onAddFriend;
 
   const SocialView({
     super.key,
     required this.userShareId,
     required this.friends,
-    required this.userScore,
-    required this.userStreak,
+    // required this.userScore,
+    //required this.userStreak,
+    //required this.userRecords,
+    // required this.userStreak,
     required this.onAddFriend,
   });
 
@@ -39,6 +45,10 @@ class _SocialViewState extends State<SocialView> {
 
   @override
   Widget build(BuildContext context) {
+    final firebase = context.watch<FirebaseProvider>();
+    final int myScore = firebase.userScore;
+    final int myStreak = firebase.userStreak;
+    
     final allProfiles = [
       ...widget.friends.map(
         (f) => {
@@ -50,7 +60,7 @@ class _SocialViewState extends State<SocialView> {
       ),
       {
         'displayName': 'You',
-        'score': widget.userScore,
+        'score': myScore,
         'shareId': widget.userShareId,
         'isMe': true,
       },
@@ -90,6 +100,15 @@ class _SocialViewState extends State<SocialView> {
                   fontSize: 26,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // streak
+              Text(
+                '🔥 $myStreak day streak',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

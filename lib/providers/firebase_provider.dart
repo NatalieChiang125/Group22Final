@@ -116,6 +116,20 @@ class FirebaseProvider with ChangeNotifier {
 
   bool get loading => _loading;
 
+  int get userStreak => _calculateStreak(_records);
+  int get userScore {
+    if (_records.isEmpty) return 0;
+
+    final avg = _records
+            .map((r) => r.healthScore)
+            .reduce((a, b) => a + b) /
+        _records.length;
+
+    final streakBonus = userStreak * 5;
+
+    return (avg + streakBonus).round();
+  }
+
   FirebaseProvider() {
     _initAuthListener();
   }
@@ -576,6 +590,63 @@ class FirebaseProvider with ChangeNotifier {
     }
 
     return score;
+  }
+
+  int _calculateStreak(List<MealRecord> records) {
+    if (records.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final recordDates = records.map((record) {
+      final d = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+      return DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
+    }).toSet();
+
+    int streak = 0;
+    DateTime checkDate = today;
+
+    if (recordDates.contains(checkDate.millisecondsSinceEpoch)) {
+      while (recordDates.contains(checkDate.millisecondsSinceEpoch)) {
+        streak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      }
+    } else {
+      checkDate = yesterday;
+
+      if (recordDates.contains(checkDate.millisecondsSinceEpoch)) {
+        while (recordDates.contains(checkDate.millisecondsSinceEpoch)) {
+          streak++;
+          checkDate = checkDate.subtract(const Duration(days: 1));
+        }
+      } else {
+        return 0;
+      }
+    }
+
+    return streak;
+  }
+
+  Future<void> addFriendByShareId(String shareId) async {
+    final currentUser = _user;
+    if (currentUser == null) return;
+
+    final query = await _db
+        .collection('users')
+        .where('shareId', isEqualTo: shareId)
+        .limit(1)
+        .get();
+
+    if (query.docs.isEmpty) {
+      throw Exception('User not found');
+    }
+
+    final friendUid = query.docs.first.id;
+
+    await _db.collection('users').doc(currentUser.uid).update({
+      'friends': FieldValue.arrayUnion([friendUid]),
+    });
   }
 
   // List<Restaurant> getSmartRecommendations(
