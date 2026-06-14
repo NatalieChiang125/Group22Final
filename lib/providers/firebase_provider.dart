@@ -705,23 +705,72 @@ class FirebaseProvider with ChangeNotifier {
 
   Future<void> addFriendByShareId(String shareId) async {
     final currentUser = _user;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+    throw Exception('請先登入帳號');
+  }
 
-    final query = await _db
-        .collection('users')
-        .where('shareId', isEqualTo: shareId)
-        .limit(1)
-        .get();
+ final String normalizedShareId =
+      shareId.trim().replaceAll('#', '').toUpperCase();
 
-    if (query.docs.isEmpty) {
-      throw Exception('User not found');
+  if (normalizedShareId.isEmpty) {
+    throw Exception('請輸入好友分享 ID');
+  }
+
+  final String myShareId =
+      _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
+
+  if (normalizedShareId == myShareId) {
+    throw Exception('不能加入自己');
+  }
+
+  final QuerySnapshot<Map<String, dynamic>> query = await _db
+      .collection('users')
+      .where('shareId', isEqualTo: normalizedShareId)
+      .limit(1)
+      .get();
+
+  if (query.docs.isEmpty) {
+    throw Exception('找不到這個分享 ID');
+  }
+
+  final QueryDocumentSnapshot<Map<String, dynamic>> friendDoc =
+      query.docs.first;
+
+  final String friendUid = friendDoc.id;
+  final Map<String, dynamic> friendData = friendDoc.data();
+
+  final List<dynamic> currentFriends =
+      List<dynamic>.from(_userProfileJson?['friends'] as List? ?? []);
+
+  final bool alreadyExists = currentFriends.any((friend) {
+    if (friend is String) {
+      return friend == friendUid;
     }
 
-    final friendUid = query.docs.first.id;
+    if (friend is Map) {
+      return friend['uid'] == friendUid;
+    }
 
-    await _db.collection('users').doc(currentUser.uid).update({
-      'friends': FieldValue.arrayUnion([friendUid]),
-    });
+    return false;
+  });
+
+  if (alreadyExists) {
+    throw Exception('這位好友已經在清單中');
+  }
+
+  final Map<String, dynamic> friendProfile = {
+    'uid': friendUid,
+    'displayName': friendData['displayName']?.toString() ?? 'Wise User',
+    'photoURL': friendData['photoURL']?.toString() ?? '',
+    'shareId': friendData['shareId']?.toString() ?? normalizedShareId,
+    'score': (friendData['score'] as num?)?.toInt() ?? 0,
+    'achievementsCount':
+        (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
+  };
+
+  await _db.collection('users').doc(currentUser.uid).update({
+    'friends': FieldValue.arrayUnion([friendProfile]),
+  });
   }
 
   // List<Restaurant> getSmartRecommendations(

@@ -159,14 +159,12 @@ class MealDetailView extends StatelessWidget {
   Widget _buildMealItem(MealRecord record, bool isLast) {
     Color scoreBg = const Color(0xFFFFF1F2);
     Color scoreText = const Color(0xFFE11D48);
-    if (record.healthScore != null) {
-      if (record.healthScore! >= 80) {
-        scoreBg = const Color(0xFFF0FDFA);
-        scoreText = const Color(0xFF0D9488);
-      } else if (record.healthScore! >= 60) {
-        scoreBg = const Color(0xFFFFFBEB);
-        scoreText = const Color(0xFFD97706);
-      }
+    if (record.healthScore! >= 80) {
+      scoreBg = const Color(0xFFF0FDFA);
+      scoreText = const Color(0xFF0D9488);
+    } else if (record.healthScore! >= 60) {
+      scoreBg = const Color(0xFFFFFBEB);
+      scoreText = const Color(0xFFD97706);
     }
 
     return Column(
@@ -203,27 +201,26 @@ class MealDetailView extends StatelessWidget {
                 ),
               ],
             ),
-            if (record.healthScore != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: scoreBg,
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: scoreText.withOpacity(0.2)),
-                ),
-                child: Text(
-                  '${record.healthScore} Health Score',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: scoreText,
-                    letterSpacing: 1.2,
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: scoreBg,
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: scoreText.withOpacity(0.2)),
+              ),
+              child: Text(
+                '${record.healthScore} Health Score',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: scoreText,
+                  letterSpacing: 1.2,
                 ),
               ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
