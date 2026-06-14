@@ -297,15 +297,19 @@ class _MainLayoutState extends State<MainLayout> {
     displayPages[3] = SocialView(
       userShareId: firebaseProvider.userProfile?['shareId'] ?? 'UNKNOWN',
       //friends: _friendsList,
-      friends: (firebaseProvider.userProfile?['friends'] ?? [])
-          .map<FriendProfile>((f) => FriendProfile(
-                uid: f['uid'],
-                displayName: f['displayName'],
-                score: f['score'],
-                shareId: f['shareId'],
-                achievementsCount: f['achievementsCount'] ?? 0,
-              ))
-          .toList(),
+      friends: List<dynamic>.from(
+  firebaseProvider.userProfile?['friends'] as List? ?? [],
+).whereType<Map>().map<FriendProfile>((f) {
+  return FriendProfile(
+    uid: f['uid']?.toString() ?? '',
+    displayName: f['displayName']?.toString() ?? 'Wise User',
+    photoURL: f['photoURL']?.toString(),
+    score: (f['score'] as num?)?.toInt() ?? 0,
+    shareId: f['shareId']?.toString() ?? '',
+    achievementsCount:
+        (f['achievementsCount'] as num?)?.toInt() ?? 0,
+  );
+}).toList(),
       // userScore: score,
       // userStreak: streak,
       //onAddFriend: _handleOnAddFriend,

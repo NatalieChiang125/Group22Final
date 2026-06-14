@@ -78,28 +78,29 @@ class WiseNavbar extends StatelessWidget implements PreferredSizeWidget {
                     const SizedBox(width: 16),
 
                     // 搜尋框 (flex-1 填滿剩餘空間，在極小螢幕隱藏)
-                    if (constraints.maxWidth > 400)
-                      Expanded(
-                        child: Container(
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50, // bg-gray-50
-                            border: Border.all(color: Colors.grey.shade200),
-                            borderRadius: BorderRadius.circular(16), // rounded-2xl
-                          ),
-                          child: const TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Search favorite foods...',
-                              hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-                              prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(vertical: 10),
-                            ),
-                          ),
-                        ),
-                      ),
+                    // if (constraints.maxWidth > 400)
+                    //   Expanded(
+                    //     child: Container(
+                    //       height: 40,
+                    //       decoration: BoxDecoration(
+                    //         color: Colors.grey.shade50, // bg-gray-50
+                    //         border: Border.all(color: Colors.grey.shade200),
+                    //         borderRadius: BorderRadius.circular(16), // rounded-2xl
+                    //       ),
+                    //       child: const TextField(
+                    //         decoration: InputDecoration(
+                    //           hintText: 'Search favorite foods...',
+                    //           hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                    //           prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey),
+                    //           border: InputBorder.none,
+                    //           contentPadding: EdgeInsets.symmetric(vertical: 10),
+                    //         ),
+                    //       ),
+                    //     ),
+                    //   ),
 
-                    const SizedBox(width: 16),
+                    //const SizedBox(width: 16),
+                    const Spacer(),
 
                     // 右側功能按鈕區
                     Row(

@@ -10,7 +10,7 @@ class SocialView extends StatefulWidget {
   // final int userStreak;
   //final List<MealRecord> userRecords;
   //final int userStreak;
-  final Function(String) onAddFriend;
+  final Future<void> Function(String) onAddFriend;
 
   const SocialView({
     super.key,
@@ -31,17 +31,37 @@ class _SocialViewState extends State<SocialView> {
   final TextEditingController _controller = TextEditingController();
   bool _isAdding = false;
 
-  void _handleAdd() {
-    final id = _controller.text.trim();
-    if (id.isEmpty) return;
+  Future<void> _handleAdd() async {
+  final String id = _controller.text.trim();
 
-    widget.onAddFriend(id);
+  if (id.isEmpty) {
+    return;
+  }
+
+  final ScaffoldMessengerState messenger =
+      ScaffoldMessenger.of(context);
+
+  try {
+    await widget.onAddFriend(id);
+
     _controller.clear();
+
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _isAdding = false;
     });
+  } catch (error) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('新增好友失敗：$error'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {

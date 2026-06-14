@@ -53,22 +53,26 @@ List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
 
   //list.sort((a, b) => getScore(b).compareTo(getScore(a)));
   list.sort((a, b) {
+
+    debugPrint("Current Priorities: $priorities");
+
     for (final priority in priorities) {
       int comparison = 0;
       switch (priority) {
-        case 'Distance':
+        case 'distance':
           // 距離越小越好
           comparison = (a.computedDistance ?? 0).compareTo(b.computedDistance ?? 0);
           break;
-        case 'Price':
+        case 'price':
           // 若預算緊張，強制把價格低的排前面
           comparison = a.priceRange.length.compareTo(b.priceRange.length);
           break;
-        case 'Rating':
+        case 'rating':
           // 評分高者優先
           comparison = b.rating.compareTo(a.rating);
           break;
-        case 'WiseScore':
+        case 'wiseScore':
+        case 'health':
           // 系統推薦分數高者優先
           comparison = b.wiseScore.compareTo(a.wiseScore);
           break;
@@ -131,12 +135,12 @@ class FirebaseProvider with ChangeNotifier {
   bool _loading = true;
 
 
-  List<String> _sortPriorities = ['WiseScore', 'Distance', 'Price', 'Rating'];
+  List<String> _sortPriorities = ['wiseScore', 'distance', 'price', 'rating'];
   List<String> get sortPriorities => _sortPriorities;
 
   // 更新優先順序的方法
   void updateSortPriorities(List<String> newPriorities) {
-    _sortPriorities = newPriorities;
+    _sortPriorities = List.from(newPriorities);
     notifyListeners(); // 讓 UI 知道設定變了
   }
 
@@ -238,7 +242,7 @@ class FirebaseProvider with ChangeNotifier {
                   prefs['priorityOrder']
                 );
           }
-          
+
           notifyListeners();
           return;
         }
@@ -278,10 +282,10 @@ class FirebaseProvider with ChangeNotifier {
             'allergies': [],
             'eatBreakfast': true,
             'priorityOrder': [
-              'WiseScore',
-              'Distance',
-              'Price',
-              'Rating'
+              'wiseScore',
+              'distance',
+              'price',
+              'rating'
             ],
             'dietaryPreference': ['Balanced'],
           },
@@ -701,23 +705,72 @@ class FirebaseProvider with ChangeNotifier {
 
   Future<void> addFriendByShareId(String shareId) async {
     final currentUser = _user;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+    throw Exception('請先登入帳號');
+  }
 
-    final query = await _db
-        .collection('users')
-        .where('shareId', isEqualTo: shareId)
-        .limit(1)
-        .get();
+ final String normalizedShareId =
+      shareId.trim().replaceAll('#', '').toUpperCase();
 
-    if (query.docs.isEmpty) {
-      throw Exception('User not found');
+  if (normalizedShareId.isEmpty) {
+    throw Exception('請輸入好友分享 ID');
+  }
+
+  final String myShareId =
+      _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
+
+  if (normalizedShareId == myShareId) {
+    throw Exception('不能加入自己');
+  }
+
+  final QuerySnapshot<Map<String, dynamic>> query = await _db
+      .collection('users')
+      .where('shareId', isEqualTo: normalizedShareId)
+      .limit(1)
+      .get();
+
+  if (query.docs.isEmpty) {
+    throw Exception('找不到這個分享 ID');
+  }
+
+  final QueryDocumentSnapshot<Map<String, dynamic>> friendDoc =
+      query.docs.first;
+
+  final String friendUid = friendDoc.id;
+  final Map<String, dynamic> friendData = friendDoc.data();
+
+  final List<dynamic> currentFriends =
+      List<dynamic>.from(_userProfileJson?['friends'] as List? ?? []);
+
+  final bool alreadyExists = currentFriends.any((friend) {
+    if (friend is String) {
+      return friend == friendUid;
     }
 
-    final friendUid = query.docs.first.id;
+    if (friend is Map) {
+      return friend['uid'] == friendUid;
+    }
 
-    await _db.collection('users').doc(currentUser.uid).update({
-      'friends': FieldValue.arrayUnion([friendUid]),
-    });
+    return false;
+  });
+
+  if (alreadyExists) {
+    throw Exception('這位好友已經在清單中');
+  }
+
+  final Map<String, dynamic> friendProfile = {
+    'uid': friendUid,
+    'displayName': friendData['displayName']?.toString() ?? 'Wise User',
+    'photoURL': friendData['photoURL']?.toString() ?? '',
+    'shareId': friendData['shareId']?.toString() ?? normalizedShareId,
+    'score': (friendData['score'] as num?)?.toInt() ?? 0,
+    'achievementsCount':
+        (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
+  };
+
+  await _db.collection('users').doc(currentUser.uid).update({
+    'friends': FieldValue.arrayUnion([friendProfile]),
+  });
   }
 
   // List<Restaurant> getSmartRecommendations(
