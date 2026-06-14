@@ -133,6 +133,102 @@ class AIService {
     }
   }
 
+  Future<Map<String, dynamic>> analyzeMealWithReceipt({
+  required Uint8List foodImageBytes,
+  required Uint8List receiptImageBytes,
+}) async {
+  try {
+    final TextPart prompt = TextPart('''
+你是 WiseBite 飲食紀錄 App 的分析助手。
+
+你會收到兩張圖片：
+1. 第一張圖片是餐點照片。
+2. 第二張圖片是該餐點的發票或收據。
+
+請同時分析兩張圖片，並只回傳 JSON。
+不要加入 Markdown、說明或其他文字。
+
+格式：
+{
+  "mealName": "餐點名稱",
+  "merchant": "店家名稱",
+  "total": 0,
+  "currency": "TWD",
+  "confidence": 0.0,
+  "healthScore": 0,
+  "nutrients": {
+    "calories": 0,
+    "protein": 0,
+    "carbs": 0,
+    "fat": 0,
+    "fiber": 0,
+    "fruit": 0
+  }
+}
+
+規則：
+1. mealName 根據餐點照片填寫具體名稱。
+2. merchant 根據收據辨識店家名稱，無法判斷時填空字串。
+3. total 必須是最後實際支付金額。
+4. 不要把發票號碼、統一編號、日期、時間、稅額、商品數量誤認為 total。
+5. 有折扣時，使用折扣後的實付金額。
+6. currency 使用 "TWD"。
+7. confidence 為 0 到 1。
+8. healthScore 為 0 到 100。
+9. 營養數值可以合理估算。
+10. 無法判斷的欄位用空字串或 0。
+''');
+
+    final DataPart foodImagePart = DataPart(
+      'image/jpeg',
+      foodImageBytes,
+    );
+
+    final DataPart receiptImagePart = DataPart(
+      'image/jpeg',
+      receiptImageBytes,
+    );
+
+    debugPrint('準備呼叫 Gemini 同時分析餐點與收據');
+
+    final GenerateContentResponse response =
+        await _model.generateContent(
+      [
+        Content.multi([
+          prompt,
+          foodImagePart,
+          receiptImagePart,
+        ]),
+      ],
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+      ),
+    );
+
+    debugPrint('Gemini 餐點與收據原始回傳：${response.text}');
+
+    final Map<String, dynamic> data =
+        jsonDecode(response.text ?? '{}') as Map<String, dynamic>;
+
+    return {
+      'mealName': data['mealName']?.toString() ?? '',
+      'merchant': data['merchant']?.toString() ?? '',
+      'total': (data['total'] as num? ?? 0).toDouble(),
+      'currency': data['currency']?.toString() ?? 'TWD',
+      'confidence': (data['confidence'] as num? ?? 0).toDouble(),
+      'healthScore': (data['healthScore'] as num? ?? 0).toInt(),
+      'nutrients': Map<String, dynamic>.from(
+        data['nutrients'] as Map? ?? {},
+      ),
+    };
+  } catch (error, stackTrace) {
+    debugPrint('Meal and receipt analysis failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+
+    throw Exception('Gemini 無法同時辨識餐點與收據，請查看 Terminal 錯誤訊息。');
+  }
+}
+
   // 5. 獲取下一餐飲食推薦
   Future<String> getNextMealRecommendation({
     required Nutrients currentIntake,

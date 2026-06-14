@@ -137,6 +137,318 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
     Navigator.of(context, rootNavigator: true).pop();
   }
 
+  Future<bool> _askWhetherToAddReceipt(
+  BuildContext context,
+) async {
+  final bool? result = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        title: const Text(
+          '是否加入收據？',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        content: const Text(
+          '加入收據後，WiseBite 可以同時辨識消費金額。沒有收據也可以直接分析餐點。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext, false);
+            },
+            child: const Text('略過收據'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext, true);
+            },
+            child: const Text('加入收據'),
+          ),
+        ],
+      );
+    },
+  );
+
+  return result ?? false;
+}
+
+Future<void> _handleMealScan(
+  BuildContext context,
+) async {
+  final ScaffoldMessengerState messenger =
+      ScaffoldMessenger.of(context);
+
+  try {
+    debugPrint('STEP 1：選擇餐點圖片');
+
+    final Uint8List? foodImageBytes =
+        await _pickImageBytes(context);
+
+    if (foodImageBytes == null) {
+      return;
+    }
+
+    final bool shouldAddReceipt =
+        await _askWhetherToAddReceipt(context);
+
+    Uint8List? receiptImageBytes;
+
+    if (shouldAddReceipt) {
+      debugPrint('STEP 2：選擇收據圖片');
+
+      receiptImageBytes =
+          await _pickImageBytes(context);
+
+      if (receiptImageBytes == null) {
+        debugPrint('使用者取消選擇收據，改成只分析餐點');
+      }
+    }
+
+    final User? user =
+        FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      throw Exception('請先登入帳號');
+    }
+
+    _showLoadingDialog(
+      receiptImageBytes == null
+          ? 'WiseBite AI 正在分析餐點營養...'
+          : 'WiseBite AI 正在分析餐點與收據...',
+    );
+
+    debugPrint('STEP 3：上傳餐點圖片');
+
+    final String foodImageUrl =
+        await _firebaseService
+            .uploadMealImage(
+              foodImageBytes,
+              user.uid,
+            )
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                throw Exception('餐點圖片上傳超時');
+              },
+            );
+
+    String receiptImageUrl = '';
+
+    if (receiptImageBytes != null) {
+      debugPrint('STEP 4：上傳收據圖片');
+
+      receiptImageUrl =
+          await _firebaseService
+              .uploadMealImage(
+                receiptImageBytes,
+                user.uid,
+              )
+              .timeout(
+                const Duration(seconds: 30),
+                onTimeout: () {
+                  throw Exception('收據圖片上傳超時');
+                },
+              );
+    }
+
+    debugPrint('STEP 5：呼叫 Gemini');
+
+    late final Map<String, dynamic> result;
+
+    if (receiptImageBytes == null) {
+      final Map<String, dynamic> foodResult =
+          await _aiService
+              .analyzeFoodImage(foodImageBytes)
+              .timeout(
+                const Duration(seconds: 60),
+                onTimeout: () {
+                  throw Exception('Gemini 餐點辨識超時');
+                },
+              );
+
+      result = {
+        'mealName':
+            foodResult['name']?.toString() ?? '無法辨識的餐點',
+        'merchant': '',
+        'total': 0,
+        'confidence': foodResult['confidence'] ?? 0,
+        'healthScore': foodResult['healthScore'] ?? 0,
+        'nutrients': foodResult['nutrients'] ?? {},
+      };
+    } else {
+      result = await _aiService
+          .analyzeMealWithReceipt(
+            foodImageBytes: foodImageBytes,
+            receiptImageBytes: receiptImageBytes,
+          )
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout: () {
+              throw Exception('Gemini 餐點與收據辨識超時');
+            },
+          );
+    }
+
+    debugPrint('Gemini 分析結果：$result');
+
+    final Map<String, dynamic> nutrients =
+        Map<String, dynamic>.from(
+      result['nutrients'] as Map? ?? {},
+    );
+
+    String recordName =
+        result['mealName']?.toString() ?? '無法辨識的餐點';
+
+    final String merchant =
+        result['merchant']?.toString() ?? '';
+
+    if (merchant.trim().isNotEmpty) {
+      recordName = '$recordName｜$merchant';
+    }
+
+    double cost =
+        (result['total'] as num? ?? 0).toDouble();
+
+    int healthScore =
+        (result['healthScore'] as num? ?? 0).toInt();
+
+    double calories =
+        (nutrients['calories'] as num? ?? 0).toDouble();
+
+    double protein =
+        (nutrients['protein'] as num? ?? 0).toDouble();
+
+    double carbs =
+        (nutrients['carbs'] as num? ?? 0).toDouble();
+
+    double fat =
+        (nutrients['fat'] as num? ?? 0).toDouble();
+
+    double fiber =
+        (nutrients['fiber'] as num? ?? 0).toDouble();
+
+    double fruit =
+        (nutrients['fruit'] as num? ?? 0).toDouble();
+
+    final double? confidence =
+        (result['confidence'] as num?)?.toDouble();
+
+    _closeLoadingDialog();
+
+    if (!mounted) {
+      return;
+    }
+
+    final Map<String, dynamic>? editedResult =
+        await Navigator.of(context)
+            .push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (BuildContext pageContext) {
+          return MealAnalysisResultView(
+            imageBytes: foodImageBytes,
+            initialName: recordName,
+            initialCost: cost,
+            initialHealthScore: healthScore,
+            initialCalories: calories,
+            initialProtein: protein,
+            initialCarbs: carbs,
+            initialFat: fat,
+            initialFiber: fiber,
+            initialFruit: fruit,
+            confidence: confidence,
+          );
+        },
+      ),
+    );
+
+    if (editedResult == null) {
+      return;
+    }
+
+    recordName =
+        editedResult['name']?.toString() ?? recordName;
+
+    cost =
+        (editedResult['cost'] as num? ?? cost).toDouble();
+
+    healthScore =
+        (editedResult['healthScore'] as num? ?? healthScore)
+            .toInt();
+
+    calories =
+        (editedResult['calories'] as num? ?? calories)
+            .toDouble();
+
+    protein =
+        (editedResult['protein'] as num? ?? protein)
+            .toDouble();
+
+    carbs =
+        (editedResult['carbs'] as num? ?? carbs)
+            .toDouble();
+
+    fat =
+        (editedResult['fat'] as num? ?? fat).toDouble();
+
+    fiber =
+        (editedResult['fiber'] as num? ?? fiber)
+            .toDouble();
+
+    fruit =
+        (editedResult['fruit'] as num? ?? fruit)
+            .toDouble();
+
+    debugPrint('STEP 6：寫入 Firestore，一次只新增一筆紀錄');
+
+    await _firebaseService
+        .saveMealRecord(
+          name: recordName,
+          cost: cost,
+          healthScore: healthScore,
+          calories: calories,
+          protein: protein,
+          carbs: carbs,
+          fat: fat,
+          fiber: fiber,
+          fruit: fruit,
+          imageUrl: foodImageUrl,
+          receiptImageUrl: receiptImageUrl,
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () {
+            throw Exception('Firestore 寫入超時');
+          },
+        );
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pop();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('成功記錄：$recordName'),
+      ),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('餐點紀錄失敗：$error');
+    debugPrintStack(stackTrace: stackTrace);
+
+    _closeLoadingDialog();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('記錄失敗：$error'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+
   Future<void> _handleCameraScan(BuildContext context, String type) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
@@ -934,35 +1246,19 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
             ),
           ),
           const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
-                child: _buildScanButton(
-                  icon: Icons.receipt_long_rounded,
-                  label: 'SCAN RECEIPT',
-                  subLabel: '發票明細秒速記帳',
-                  iconColor: Colors.amber.shade700,
-                  backgroundColor: Colors.amber.shade50,
-                  onTap: () {
-                    _handleCameraScan(context, 'Receipt');
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildScanButton(
-                  icon: Icons.photo_camera_rounded,
-                  label: 'SCAN NUTRITION',
-                  subLabel: '相機拍照營養辨識',
-                  iconColor: Colors.purple.shade700,
-                  backgroundColor: Colors.purple.shade50,
-                  onTap: () {
-                    _handleCameraScan(context, 'Nutrition');
-                  },
-                ),
-              ),
-            ],
-          ),
+          SizedBox(
+  width: double.infinity,
+  child: _buildScanButton(
+    icon: Icons.photo_camera_rounded,
+    label: 'SCAN MEAL',
+    subLabel: '辨識餐點，收據可選填',
+    iconColor: Colors.purple.shade700,
+    backgroundColor: Colors.purple.shade50,
+    onTap: () {
+      _handleMealScan(context);
+    },
+  ),
+),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,

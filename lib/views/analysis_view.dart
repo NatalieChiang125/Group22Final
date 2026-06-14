@@ -7,7 +7,7 @@ class AnalysisView extends StatefulWidget {
   final UserStats stats;
   final List<MealRecord> records;
   final String recommendation;
-  final Function(String)? onDeleteRecord;
+  final Future<void> Function(String)? onDeleteRecord;
   final Function(String, Map<String, dynamic>)? onUpdateRecord;
 
   const AnalysisView({
@@ -753,11 +753,40 @@ class _AnalysisViewState extends State<AnalysisView> {
                               ),
                               const SizedBox(width: 8),
                               PopupMenuButton<String>(
-                                onSelected: (val) {
-                                  if (val == 'edit') _openEditDialog(record);
-                                  if (val == 'delete')
-                                    widget.onDeleteRecord?.call(record.id);
-                                },
+  onSelected: (val) async {
+    if (val == 'edit') {
+      _openEditDialog(record);
+      return;
+    }
+
+    if (val == 'delete') {
+      try {
+        await widget.onDeleteRecord?.call(record.id);
+
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('紀錄已刪除'),
+            backgroundColor: Color(0xFF059669),
+          ),
+        );
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('刪除失敗：$error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  },
                                 itemBuilder: (context) => [
                                   const PopupMenuItem(
                                     value: 'edit',

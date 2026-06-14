@@ -89,6 +89,7 @@ class FirebaseService {
     double fiber = 0,
     double fruit = 0,
     String? imageUrl,
+    String? receiptImageUrl,
   }) async {
     final User? user = currentUser;
 
@@ -112,6 +113,7 @@ class FirebaseService {
         'cost': cost,
         'healthScore': healthScore,
         'image': imageUrl ?? '',
+        'receiptImage': receiptImageUrl ?? '',
         'nutrients': {
           'calories': calories,
           'protein': protein,
