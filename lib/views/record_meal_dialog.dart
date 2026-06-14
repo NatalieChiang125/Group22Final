@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'meal_analysis_result_view.dart';
+import 'package:provider/provider.dart';
+import '../providers/firebase_provider.dart';
 
 import '../services/ai_service.dart';
 import '../services/firebase_service.dart';
@@ -140,7 +142,6 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
 
     try {
       debugPrint('STEP 1：準備選擇圖片');
-
       final Uint8List? selectedBytes = await _pickImageBytes(context);
 
       if (selectedBytes == null) {
@@ -154,10 +155,13 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
       );
 
       final User? user = FirebaseAuth.instance.currentUser;
-
       if (user == null) {
         throw Exception('請先登入帳號');
       }
+
+      // 🌟 新增：初始化日期與時間狀態（預設為現在）
+      DateTime selectedDate = DateTime.now();
+      TimeOfDay selectedTime = TimeOfDay.now();
 
       _showLoadingDialog(
         type == 'Nutrition'
@@ -166,7 +170,6 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
       );
 
       debugPrint('STEP 3：開始上傳 Firebase Storage');
-
       final String imageUrl = await _firebaseService
           .uploadMealImage(selectedBytes, user.uid)
           .timeout(
@@ -201,38 +204,26 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
             );
 
         debugPrint('Gemini 餐點分析成功');
-        debugPrint('Gemini 回傳：$aiResult');
-
         final Map<String, dynamic> nutrients = Map<String, dynamic>.from(
           aiResult['nutrients'] as Map? ?? {},
         );
 
         recordName = aiResult['name']?.toString() ?? '相機分析餐點';
-
         healthScore = (aiResult['healthScore'] as num? ?? 0).toInt();
-
         calories = (nutrients['calories'] as num? ?? 0).toDouble();
-
         protein = (nutrients['protein'] as num? ?? 0).toDouble();
-
         carbs = (nutrients['carbs'] as num? ?? 0).toDouble();
-
         fat = (nutrients['fat'] as num? ?? 0).toDouble();
-
         fiber = (nutrients['fiber'] as num? ?? 0).toDouble();
-
         fruit = (nutrients['fruit'] as num? ?? 0).toDouble();
 
         final double? confidence = (aiResult['confidence'] as num?)?.toDouble();
 
-        // 關閉「AI 正在分析」的 Loading。
         _closeLoadingDialog();
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
-        // 開啟結果確認頁面。
+        // 開啟結果確認頁面
         final Map<String, dynamic>? editedResult = await Navigator.of(context)
             .push<Map<String, dynamic>>(
               MaterialPageRoute(
@@ -254,30 +245,102 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
               ),
             );
 
-        // 使用者按取消，不寫入 Firebase。
-        if (editedResult == null) {
-          return;
-        }
+        if (editedResult == null) return; // 使用者按取消
 
         recordName = editedResult['name']?.toString() ?? recordName;
-
         cost = (editedResult['cost'] as num? ?? cost).toDouble();
-
         healthScore = (editedResult['healthScore'] as num? ?? healthScore)
             .toInt();
-
         calories = (editedResult['calories'] as num? ?? calories).toDouble();
-
         protein = (editedResult['protein'] as num? ?? protein).toDouble();
-
         carbs = (editedResult['carbs'] as num? ?? carbs).toDouble();
-
         fat = (editedResult['fat'] as num? ?? fat).toDouble();
-
         fiber = (editedResult['fiber'] as num? ?? fiber).toDouble();
-
         fruit = (editedResult['fruit'] as num? ?? fruit).toDouble();
+
+        // 🌟 新增：拍照營養辨識完成後，彈出對話框調整這餐的日期時間
+        final bool? dateConfirmed = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return StatefulBuilder(
+              builder: (BuildContext context, StateSetter setDialogState) {
+                return AlertDialog(
+                  title: const Text(
+                    '設定餐點時間',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '請選擇「$recordName」的用餐時間：',
+                        style: const TextStyle(color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final DateTime? date = await showDatePicker(
+                                  context: dialogContext,
+                                  initialDate: selectedDate,
+                                  firstDate: DateTime(2025),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (date != null)
+                                  setDialogState(() => selectedDate = date);
+                              },
+                              icon: const Icon(
+                                Icons.calendar_today_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final TimeOfDay? time = await showTimePicker(
+                                  context: dialogContext,
+                                  initialTime: selectedTime,
+                                );
+                                if (time != null)
+                                  setDialogState(() => selectedTime = time);
+                              },
+                              icon: const Icon(
+                                Icons.access_time_rounded,
+                                size: 16,
+                              ),
+                              label: Text(selectedTime.format(context)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('確認儲存'),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+        if (dateConfirmed != true) return;
       } else {
+        // ================= 發票模式 =================
         final Map<String, dynamic> receiptResult = await _aiService
             .analyzeReceiptImage(selectedBytes)
             .timeout(
@@ -288,39 +351,33 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
             );
 
         debugPrint('Gemini 發票辨識成功');
-        debugPrint('Gemini 發票回傳：$receiptResult');
-
         final String merchant = receiptResult['merchant']?.toString() ?? '';
-
         final double detectedTotal = (receiptResult['total'] as num? ?? 0)
             .toDouble();
-
         final double confidence = (receiptResult['confidence'] as num? ?? 0)
             .toDouble();
 
         recordName = merchant.trim().isEmpty ? '發票消費紀錄' : merchant;
-
         cost = detectedTotal;
 
-        // Gemini 分析完後先關閉 Loading。
         _closeLoadingDialog();
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
         final TextEditingController merchantController = TextEditingController(
           text: recordName,
         );
-
         final TextEditingController totalController = TextEditingController(
           text: cost.toStringAsFixed(0),
         );
 
-        final Map<String, dynamic>? editedReceipt =
-            await showDialog<Map<String, dynamic>>(
-              context: context,
-              builder: (BuildContext dialogContext) {
+        // 🌟 改變：將發票確認視窗封裝進 StatefulBuilder，以便能在同個視窗直接改日期與時間！
+        final Map<String, dynamic>?
+        editedReceipt = await showDialog<Map<String, dynamic>>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return StatefulBuilder(
+              builder: (BuildContext context, StateSetter setDialogState) {
                 return AlertDialog(
                   title: const Text(
                     '確認發票辨識結果',
@@ -328,49 +385,95 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                   ),
                   content: SizedBox(
                     width: 420,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'AI 辨識可信度：'
-                          '${(confidence * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        TextField(
-                          controller: merchantController,
-                          decoration: InputDecoration(
-                            labelText: '店家名稱',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'AI 辨識可信度：${(confidence * 100).toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: totalController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: '實付金額',
-                            suffixText: '元',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                          const SizedBox(height: 18),
+                          TextField(
+                            controller: merchantController,
+                            decoration: InputDecoration(
+                              labelText: '店家名稱',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: totalController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: '實付金額',
+                              suffixText: '元',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // 🌟 新增：在發票確認視窗內加入日期時間調整按鈕
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final DateTime? date = await showDatePicker(
+                                      context: dialogContext,
+                                      initialDate: selectedDate,
+                                      firstDate: DateTime(2025),
+                                      lastDate: DateTime.now(),
+                                    );
+                                    if (date != null)
+                                      setDialogState(() => selectedDate = date);
+                                  },
+                                  icon: const Icon(
+                                    Icons.calendar_today_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final TimeOfDay? time =
+                                        await showTimePicker(
+                                          context: dialogContext,
+                                          initialTime: selectedTime,
+                                        );
+                                    if (time != null)
+                                      setDialogState(() => selectedTime = time);
+                                  },
+                                  icon: const Icon(
+                                    Icons.access_time_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(selectedTime.format(context)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                      },
+                      onPressed: () => Navigator.pop(dialogContext),
                       child: const Text('取消，不儲存'),
                     ),
                     FilledButton(
@@ -387,38 +490,51 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                 );
               },
             );
+          },
+        );
 
         merchantController.dispose();
         totalController.dispose();
 
-        // 使用者取消，不寫入 Firestore。
-        if (editedReceipt == null) {
-          return;
-        }
+        if (editedReceipt == null) return; // 使用者取消
 
         final String editedMerchant =
             editedReceipt['merchant']?.toString() ?? '';
-
         recordName = editedMerchant.trim().isEmpty ? '發票消費紀錄' : editedMerchant;
-
         cost = (editedReceipt['total'] as num? ?? 0).toDouble();
       }
 
       debugPrint('STEP 7：準備寫入 Firestore');
 
-      await _firebaseService
-          .saveMealRecord(
-            name: recordName,
-            cost: cost,
-            healthScore: healthScore,
-            calories: calories,
-            protein: protein,
-            carbs: carbs,
-            fat: fat,
-            fiber: fiber,
-            fruit: fruit,
-            imageUrl: imageUrl,
-          )
+      // 🌟 新增：不論是發票還是營養拍照，都統一生成自訂的時間戳記
+      final int customTimestamp = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      ).millisecondsSinceEpoch;
+
+      // 打包成與手動輸入格式相同的 JSON
+      final Map<String, dynamic> recordJson = {
+        'name': recordName,
+        'cost': cost,
+        'healthScore': healthScore,
+        'timestamp': customTimestamp, // 👈 完美注入自訂時間
+        'nutrients': {
+          'calories': calories,
+          'protein': protein,
+          'carbs': carbs,
+          'fat': fat,
+          'fiber': fiber,
+          'fruit': fruit,
+        },
+        if (imageUrl.isNotEmpty) 'image': imageUrl,
+      };
+
+      // 🌟 改變：使用 Provider 寫入，取代舊有的 _firebaseService 寫法，確保前端全局數據即時刷新連動！
+      await Provider.of<FirebaseProvider>(context, listen: false)
+          .addMealRecord(recordJson)
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () {
@@ -430,19 +546,14 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
 
       _closeLoadingDialog();
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       Navigator.of(context).pop();
 
       messenger.showSnackBar(SnackBar(content: Text('成功記錄：$recordName')));
     } catch (error, stackTrace) {
       debugPrint('餐點紀錄失敗：$error');
       debugPrintStack(stackTrace: stackTrace);
-
       _closeLoadingDialog();
-
       messenger.showSnackBar(
         SnackBar(content: Text('記錄失敗：$error'), backgroundColor: Colors.red),
       );
@@ -451,28 +562,23 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
 
   Future<void> _showManualEntryDialog(BuildContext context) async {
     final TextEditingController nameController = TextEditingController();
-
     final TextEditingController costController = TextEditingController();
-
     final TextEditingController caloriesController = TextEditingController();
-
     final TextEditingController proteinController = TextEditingController();
-
     final TextEditingController carbsController = TextEditingController();
-
     final TextEditingController fatController = TextEditingController();
-
     final TextEditingController fiberController = TextEditingController();
-
     final TextEditingController fruitController = TextEditingController();
-
     final TextEditingController healthScoreController = TextEditingController(
       text: '70',
     );
 
     Uint8List? selectedImageBytes;
-
     bool isSaving = false;
+
+    // 🌟 新增：用來記錄使用者選擇的日期與時間，預設為現在
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
 
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
@@ -497,6 +603,65 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                         hint: '例如：雞胸肉健康餐盒',
                       ),
                       const SizedBox(height: 12),
+
+                      // 🌟 新增：日期與時間選擇器 (時空旅行魔法)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: isSaving
+                                  ? null
+                                  : () async {
+                                      final DateTime?
+                                      date = await showDatePicker(
+                                        context: dialogContext,
+                                        initialDate: selectedDate,
+                                        firstDate: DateTime(2020), // 允許選擇的最早年份
+                                        lastDate: DateTime.now(), // 防呆：不允許記錄未來
+                                      );
+                                      if (date != null) {
+                                        setDialogState(
+                                          () => selectedDate = date,
+                                        );
+                                      }
+                                    },
+                              icon: const Icon(
+                                Icons.calendar_today_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: isSaving
+                                  ? null
+                                  : () async {
+                                      final TimeOfDay? time =
+                                          await showTimePicker(
+                                            context: dialogContext,
+                                            initialTime: selectedTime,
+                                          );
+                                      if (time != null) {
+                                        setDialogState(
+                                          () => selectedTime = time,
+                                        );
+                                      }
+                                    },
+                              icon: const Icon(
+                                Icons.access_time_rounded,
+                                size: 18,
+                              ),
+                              label: Text(selectedTime.format(context)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
@@ -505,14 +670,11 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                               : () async {
                                   final Uint8List? bytes =
                                       await _pickImageBytes(dialogContext);
-
-                                  if (bytes == null) {
-                                    return;
+                                  if (bytes != null) {
+                                    setDialogState(() {
+                                      selectedImageBytes = bytes;
+                                    });
                                   }
-
-                                  setDialogState(() {
-                                    selectedImageBytes = bytes;
-                                  });
                                 },
                           icon: const Icon(Icons.add_photo_alternate_outlined),
                           label: Text(
@@ -586,9 +748,7 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                 TextButton(
                   onPressed: isSaving
                       ? null
-                      : () {
-                          Navigator.pop(dialogContext);
-                        },
+                      : () => Navigator.pop(dialogContext),
                   child: const Text('取消'),
                 ),
                 FilledButton(
@@ -596,7 +756,6 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                       ? null
                       : () async {
                           final String mealName = nameController.text.trim();
-
                           if (mealName.isEmpty) {
                             messenger.showSnackBar(
                               const SnackBar(content: Text('請輸入餐點名稱')),
@@ -606,7 +765,6 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
 
                           final int healthScore =
                               int.tryParse(healthScoreController.text) ?? 0;
-
                           if (healthScore < 0 || healthScore > 100) {
                             messenger.showSnackBar(
                               const SnackBar(content: Text('健康分數必須介於 0 到 100')),
@@ -614,20 +772,14 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                             return;
                           }
 
-                          setDialogState(() {
-                            isSaving = true;
-                          });
+                          setDialogState(() => isSaving = true);
 
                           try {
                             final User? user =
                                 FirebaseAuth.instance.currentUser;
-
-                            if (user == null) {
-                              throw Exception('請先登入帳號');
-                            }
+                            if (user == null) throw Exception('請先登入帳號');
 
                             String imageUrl = '';
-
                             if (selectedImageBytes != null) {
                               imageUrl = await _firebaseService.uploadMealImage(
                                 selectedImageBytes!,
@@ -635,39 +787,51 @@ class _RecordMealDialogState extends State<RecordMealDialog> {
                               );
                             }
 
-                            await _firebaseService.saveMealRecord(
-                              name: mealName,
-                              cost: _parseDouble(costController.text),
-                              healthScore: healthScore,
-                              calories: _parseDouble(caloriesController.text),
-                              protein: _parseDouble(proteinController.text),
-                              carbs: _parseDouble(carbsController.text),
-                              fat: _parseDouble(fatController.text),
-                              fiber: _parseDouble(fiberController.text),
-                              fruit: _parseDouble(fruitController.text),
-                              imageUrl: imageUrl,
-                            );
+                            // 🌟 新增：組合出自訂的 timestamp (毫秒)
+                            final customTimestamp = DateTime(
+                              selectedDate.year,
+                              selectedDate.month,
+                              selectedDate.day,
+                              selectedTime.hour,
+                              selectedTime.minute,
+                            ).millisecondsSinceEpoch;
 
-                            if (!dialogContext.mounted) {
-                              return;
-                            }
+                            // 🌟 改變：直接將資料打包成 JSON，呼叫 FirebaseProvider 的 addMealRecord
+                            final recordJson = {
+                              'name': mealName,
+                              'cost': _parseDouble(costController.text),
+                              'healthScore': healthScore,
+                              'timestamp': customTimestamp, // 👈 帶入自訂時間
+                              'nutrients': {
+                                'calories': _parseDouble(
+                                  caloriesController.text,
+                                ),
+                                'protein': _parseDouble(proteinController.text),
+                                'carbs': _parseDouble(carbsController.text),
+                                'fat': _parseDouble(fatController.text),
+                                'fiber': _parseDouble(fiberController.text),
+                                'fruit': _parseDouble(fruitController.text),
+                              },
+                              if (imageUrl.isNotEmpty) 'image': imageUrl,
+                            };
 
+                            // 使用你寫好的 FirebaseProvider 來上傳，這樣 App 各處的圖表才會即時連動
+                            await Provider.of<FirebaseProvider>(
+                              context,
+                              listen: false,
+                            ).addMealRecord(recordJson);
+
+                            if (!dialogContext.mounted) return;
                             Navigator.pop(dialogContext);
 
-                            if (!mounted) {
-                              return;
-                            }
-
+                            if (!mounted) return;
                             Navigator.pop(context);
 
                             messenger.showSnackBar(
                               SnackBar(content: Text('成功新增餐點：$mealName')),
                             );
                           } catch (error) {
-                            setDialogState(() {
-                              isSaving = false;
-                            });
-
+                            setDialogState(() => isSaving = false);
                             messenger.showSnackBar(
                               SnackBar(
                                 content: Text('新增失敗：$error'),
