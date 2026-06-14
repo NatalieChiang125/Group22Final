@@ -340,7 +340,7 @@ class _MainLayoutState extends State<MainLayout> {
         currentPriorities:
             firebaseProvider.userProfile?['preferences']?['priorityOrder']
                 ?.cast<String>() ??
-            ['Healthy Choice', 'Distance', 'Average Price', 'User Ratings'],
+            ['WiseScore','Distance','Price','Rating'],
         currentIncludeBreakfast:
             firebaseProvider.userProfile?['preferences']?['eatBreakfast'] ??
             true,
@@ -360,16 +360,28 @@ class _MainLayoutState extends State<MainLayout> {
               List<String> newAllergies,
               List<String> newDietaryStyles,
             ) async {
+              final provider = Provider.of<FirebaseProvider>(
+                context,
+                listen: false,
+              );
+              provider.updateSortPriorities(
+                newPriorities,
+              );
+
               Map<String, dynamic> preferenceUpdates = {
                 'priorityOrder': newPriorities,
                 'eatBreakfast': newIncludeBreakfast,
                 'allergies': newAllergies,
                 'dietaryPreference': newDietaryStyles,
               };
-              Provider.of<FirebaseProvider>(
-                context,
-                listen: false,
-              ).updatePreferences(preferenceUpdates);
+              // Provider.of<FirebaseProvider>(
+              //   context,
+              //   listen: false,
+              // ).updatePreferences(preferenceUpdates);
+              await provider.updatePreferences(
+                preferenceUpdates,
+              );
+
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Settings updated successfully!'),

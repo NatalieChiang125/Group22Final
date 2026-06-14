@@ -20,6 +20,7 @@ List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
   final double userLat = args['lat'] as double;
   final double userLng = args['lng'] as double;
   final bool isOverBudget = args['isOverBudget'] as bool;
+  final List<String> priorities = args['priorities'] as List<String>;
 
   double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const p = 0.017453292519943295; // Math.PI / 180
@@ -50,7 +51,34 @@ List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
     );
   }
 
-  list.sort((a, b) => getScore(b).compareTo(getScore(a)));
+  //list.sort((a, b) => getScore(b).compareTo(getScore(a)));
+  list.sort((a, b) {
+    for (final priority in priorities) {
+      int comparison = 0;
+      switch (priority) {
+        case 'Distance':
+          // 距離越小越好
+          comparison = (a.computedDistance ?? 0).compareTo(b.computedDistance ?? 0);
+          break;
+        case 'Price':
+          // 若預算緊張，強制把價格低的排前面
+          comparison = a.priceRange.length.compareTo(b.priceRange.length);
+          break;
+        case 'Rating':
+          // 評分高者優先
+          comparison = b.rating.compareTo(a.rating);
+          break;
+        case 'WiseScore':
+          // 系統推薦分數高者優先
+          comparison = b.wiseScore.compareTo(a.wiseScore);
+          break;
+      }
+      
+      // 如果這個維度比出高下，就直接回傳結果；若相等則進入下一個 priority
+      if (comparison != 0) return comparison;
+    }
+    return 0; // 若所有屬性都一樣，回傳 0
+  });
 
   return list;
 }
@@ -84,6 +112,8 @@ List<Restaurant> _calculateDistanceOnlyInBackground(Map<String, dynamic> args) {
   return list;
 }
 
+
+
 class FirebaseProvider with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -99,6 +129,16 @@ class FirebaseProvider with ChangeNotifier {
   List<Restaurant> _restaurants = [];
 
   bool _loading = true;
+
+
+  List<String> _sortPriorities = ['WiseScore', 'Distance', 'Price', 'Rating'];
+  List<String> get sortPriorities => _sortPriorities;
+
+  // 更新優先順序的方法
+  void updateSortPriorities(List<String> newPriorities) {
+    _sortPriorities = newPriorities;
+    notifyListeners(); // 讓 UI 知道設定變了
+  }
 
   StreamSubscription<User?>? _authSubscription;
 
@@ -185,6 +225,20 @@ class FirebaseProvider with ChangeNotifier {
       (DocumentSnapshot<Map<String, dynamic>> snapshot) async {
         if (snapshot.exists) {
           _userProfileJson = snapshot.data();
+
+          final prefs =
+              _userProfileJson?['preferences'] as Map<String,dynamic>?;
+
+
+          if (prefs != null &&
+              prefs['priorityOrder'] != null) {
+
+            _sortPriorities =
+                List<String>.from(
+                  prefs['priorityOrder']
+                );
+          }
+          
           notifyListeners();
           return;
         }
@@ -223,7 +277,12 @@ class FirebaseProvider with ChangeNotifier {
           'preferences': {
             'allergies': [],
             'eatBreakfast': true,
-            'priorityOrder': ['health', 'distance', 'price', 'rating'],
+            'priorityOrder': [
+              'WiseScore',
+              'Distance',
+              'Price',
+              'Rating'
+            ],
             'dietaryPreference': ['Balanced'],
           },
           'budget': {'monthlyLimit': 15000, 'history': []},
@@ -510,6 +569,8 @@ class FirebaseProvider with ChangeNotifier {
     try {
       final Position position = await _getCurrentPosition();
 
+      final priorities = _sortPriorities;
+
       List<Restaurant> list = await _googlePlacesService
           .getNearbyRestaurants(
             position.latitude,
@@ -528,6 +589,7 @@ class FirebaseProvider with ChangeNotifier {
         'lat': position.latitude,
         'lng': position.longitude,
         'isOverBudget': isOverBudget,
+        'priorities': priorities,
       });
 
       return sortedList;

@@ -18,17 +18,25 @@ class _DashboardViewState extends State<DashboardView> {
   List<Restaurant> _restaurants = [];
   bool _loadingRestaurants = true;
   String? _restaurantError;
+  List<String> _lastPriorities = [];
+  bool _isFetching = false;
 
   @override
   void initState() {
     super.initState();
-    _loadRestaurants();
+    //_loadRestaurants();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRestaurants();
+    });
   }
 
   Future<void> _loadRestaurants({
     double todaySpend = 0,
     double dailyBudget = 500,
   }) async {
+    if (_isFetching) return;
+    _isFetching = true;
+
     final provider = Provider.of<FirebaseProvider>(context, listen: false);
 
     setState(() {
@@ -60,12 +68,30 @@ class _DashboardViewState extends State<DashboardView> {
         _loadingRestaurants = false;
         _restaurantError = e.toString();
       });
+    } finally {
+      _isFetching = false;
     }
+  }
+
+  void _checkPriorityChange(FirebaseProvider provider) {
+    final current = provider.sortPriorities;
+
+    if (_lastPriorities.join() == current.join()) return;
+
+    _lastPriorities = List.from(current);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadRestaurants();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final firebaseProvider = Provider.of<FirebaseProvider>(context);
+
+    _checkPriorityChange(firebaseProvider);
+    
 
     if (firebaseProvider.loading == true) {
       return const Scaffold(
