@@ -1,6 +1,7 @@
 // lib/views/dashboard_view.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
 // 💡 使用精確相對路徑，徹底杜絕 Package Name 錯配引發的編譯錯誤
 import '../providers/firebase_provider.dart';
 import '../models/types.dart';
@@ -19,7 +20,8 @@ class _DashboardViewState extends State<DashboardView> {
   bool _loadingRestaurants = true;
   String? _restaurantError;
   List<String> _lastPriorities = [];
-  bool _isFetching = false;
+  //bool _isFetching = false;
+  int _requestId = 0;
 
   @override
   void initState() {
@@ -34,8 +36,7 @@ class _DashboardViewState extends State<DashboardView> {
     double todaySpend = 0,
     double dailyBudget = 500,
   }) async {
-    if (_isFetching) return;
-    _isFetching = true;
+    final int currentRequest = ++_requestId;
 
     final provider = Provider.of<FirebaseProvider>(context, listen: false);
 
@@ -50,35 +51,38 @@ class _DashboardViewState extends State<DashboardView> {
         dailyBudget,
       );
 
-      if (!mounted) {
-        return;
-      }
+      // 🚨 如果不是最新 request，直接丟掉結果
+      if (currentRequest != _requestId) return;
+
+      if (!mounted) return;
 
       setState(() {
         _restaurants = result;
         _loadingRestaurants = false;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      // 🚨 同樣 guard
+      if (currentRequest != _requestId) return;
+
+      if (!mounted) return;
 
       setState(() {
         _restaurants = [];
         _loadingRestaurants = false;
         _restaurantError = e.toString();
       });
-    } finally {
-      _isFetching = false;
     }
   }
 
   void _checkPriorityChange(FirebaseProvider provider) {
     final current = provider.sortPriorities;
 
-    if (_lastPriorities.join() == current.join()) return;
+    //if (_lastPriorities.join() == current.join()) return;
+    if (listEquals(_lastPriorities, current)) return;
 
     _lastPriorities = List.from(current);
+
+    debugPrint("偵測到排序變更，重新載入: $_lastPriorities");
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -91,7 +95,7 @@ class _DashboardViewState extends State<DashboardView> {
     final firebaseProvider = Provider.of<FirebaseProvider>(context);
 
     _checkPriorityChange(firebaseProvider);
-    
+
 
     if (firebaseProvider.loading == true) {
       return const Scaffold(

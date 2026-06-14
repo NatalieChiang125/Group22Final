@@ -53,22 +53,26 @@ List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
 
   //list.sort((a, b) => getScore(b).compareTo(getScore(a)));
   list.sort((a, b) {
+
+    debugPrint("Current Priorities: $priorities");
+
     for (final priority in priorities) {
       int comparison = 0;
       switch (priority) {
-        case 'Distance':
+        case 'distance':
           // 距離越小越好
           comparison = (a.computedDistance ?? 0).compareTo(b.computedDistance ?? 0);
           break;
-        case 'Price':
+        case 'price':
           // 若預算緊張，強制把價格低的排前面
           comparison = a.priceRange.length.compareTo(b.priceRange.length);
           break;
-        case 'Rating':
+        case 'rating':
           // 評分高者優先
           comparison = b.rating.compareTo(a.rating);
           break;
-        case 'WiseScore':
+        case 'wiseScore':
+        case 'health':
           // 系統推薦分數高者優先
           comparison = b.wiseScore.compareTo(a.wiseScore);
           break;
@@ -131,12 +135,12 @@ class FirebaseProvider with ChangeNotifier {
   bool _loading = true;
 
 
-  List<String> _sortPriorities = ['WiseScore', 'Distance', 'Price', 'Rating'];
+  List<String> _sortPriorities = ['wiseScore', 'distance', 'price', 'rating'];
   List<String> get sortPriorities => _sortPriorities;
 
   // 更新優先順序的方法
   void updateSortPriorities(List<String> newPriorities) {
-    _sortPriorities = newPriorities;
+    _sortPriorities = List.from(newPriorities);
     notifyListeners(); // 讓 UI 知道設定變了
   }
 
@@ -238,7 +242,7 @@ class FirebaseProvider with ChangeNotifier {
                   prefs['priorityOrder']
                 );
           }
-          
+
           notifyListeners();
           return;
         }
@@ -278,10 +282,10 @@ class FirebaseProvider with ChangeNotifier {
             'allergies': [],
             'eatBreakfast': true,
             'priorityOrder': [
-              'WiseScore',
-              'Distance',
-              'Price',
-              'Rating'
+              'wiseScore',
+              'distance',
+              'price',
+              'rating'
             ],
             'dietaryPreference': ['Balanced'],
           },
