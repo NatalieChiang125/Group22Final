@@ -315,11 +315,12 @@ class RestaurantAgentService {
     required double lng,
     required double todaySpend,
     required double dailyBudget,
+    required List<String> userPriorities,
   }) async {
-    // AI Planner：先讓 AI 決定要使用哪些 tools。
     final RestaurantAgentPlan plan = await _createPlanWithAi(
       todaySpend: todaySpend,
       dailyBudget: dailyBudget,
+      userPriorities: userPriorities,
     );
 
     debugPrint(
@@ -329,7 +330,6 @@ class RestaurantAgentService {
     debugPrint('RestaurantAgent selected priorities: ${plan.priorities}');
     debugPrint('RestaurantAgent decision reason: ${plan.reason}');
 
-    // Tool 1：搜尋附近餐廳。
     final List<Restaurant> restaurants =
         await tools.searchNearbyRestaurantsTool(
       lat: lat,
@@ -338,7 +338,6 @@ class RestaurantAgentService {
       radiusMeters: plan.radiusMeters,
     );
 
-    // Tool 2：依照 AI 或 fallback 決定的 priorities 排序。
     final List<Restaurant> sortedRestaurants = tools.rankRestaurantsTool(
       restaurants: restaurants,
       priorities: plan.priorities,
@@ -360,10 +359,10 @@ class RestaurantAgentService {
   Future<RestaurantAgentPlan> _createPlanWithAi({
     required double todaySpend,
     required double dailyBudget,
+    required List<String> userPriorities,
   }) async {
     final DateTime now = DateTime.now();
 
-    // 避免短時間內一直呼叫 AI planner。
     if (_lastPlan != null &&
         _lastTodaySpend == todaySpend &&
         _lastDailyBudget == dailyBudget &&
@@ -378,16 +377,26 @@ class RestaurantAgentService {
           await tools.aiService.planRestaurantRecommendationTools(
         todaySpend: todaySpend,
         dailyBudget: dailyBudget,
-        currentPriorities: const [
-          'wiseScore',
-          'health',
-          'distance',
-          'price',
-          'rating',
-        ],
+        currentPriorities: userPriorities,
       );
 
-      final RestaurantAgentPlan plan = _parseAiPlan(planJson);
+      RestaurantAgentPlan plan = _parseAiPlan(
+        planJson,
+        userPriorities,
+      );
+
+      // 預算充足時，保留使用者 setting 的排序，不讓 AI 吃掉設定。
+      if (dailyBudget > 0 && todaySpend / dailyBudget < 0.8) {
+        plan = RestaurantAgentPlan(
+          keyword: plan.keyword,
+          radiusMeters: plan.radiusMeters,
+          priorities: userPriorities.isNotEmpty
+              ? List<String>.from(userPriorities)
+              : plan.priorities,
+          reason: '${plan.reason} 預算充足，因此排序順序保留使用者設定。',
+          isAiPlanned: plan.isAiPlanned,
+        );
+      }
 
       _savePlanCache(
         plan: plan,
@@ -402,6 +411,7 @@ class RestaurantAgentService {
       final RestaurantAgentPlan fallbackPlan = _createRuleBasedPlan(
         todaySpend: todaySpend,
         dailyBudget: dailyBudget,
+        userPriorities: userPriorities,
       );
 
       _savePlanCache(
@@ -415,39 +425,25 @@ class RestaurantAgentService {
   }
 
   /// 解析 AI 回傳的 toolCalls。
-  ///
-  /// 預期格式：
-  /// {
-  ///   "toolCalls": [
-  ///     {
-  ///       "name": "searchNearbyRestaurantsTool",
-  ///       "arguments": {
-  ///         "keyword": "健康餐",
-  ///         "radiusMeters": 2000
-  ///       }
-  ///     },
-  ///     {
-  ///       "name": "rankRestaurantsTool",
-  ///       "arguments": {
-  ///         "priorities": ["health", "wiseScore", "distance", "price"]
-  ///       }
-  ///     }
-  ///   ],
-  ///   "reason": "..."
-  /// }
-  RestaurantAgentPlan _parseAiPlan(Map<String, dynamic> planJson) {
+  RestaurantAgentPlan _parseAiPlan(
+    Map<String, dynamic> planJson,
+    List<String> userPriorities,
+  ) {
     final List<dynamic> toolCalls =
         List<dynamic>.from(planJson['toolCalls'] as List? ?? []);
 
     String keyword = '餐廳';
     int radiusMeters = 2000;
-    List<String> priorities = <String>[
-      'wiseScore',
-      'health',
-      'rating',
-      'distance',
-      'price',
-    ];
+
+    List<String> priorities = userPriorities.isNotEmpty
+        ? List<String>.from(userPriorities)
+        : <String>[
+            'wiseScore',
+            'health',
+            'rating',
+            'distance',
+            'price',
+          ];
 
     for (final dynamic rawCall in toolCalls) {
       if (rawCall is! Map) continue;
@@ -520,16 +516,20 @@ class RestaurantAgentService {
   RestaurantAgentPlan _createRuleBasedPlan({
     required double todaySpend,
     required double dailyBudget,
+    required List<String> userPriorities,
   }) {
     final String keyword = tools.selectSearchKeywordTool(
       todaySpend: todaySpend,
       dailyBudget: dailyBudget,
     );
 
-    final List<String> priorities = tools.selectRankingPrioritiesTool(
+    final List<String> fallbackPriorities = tools.selectRankingPrioritiesTool(
       todaySpend: todaySpend,
       dailyBudget: dailyBudget,
     );
+
+    final List<String> priorities =
+        userPriorities.isNotEmpty ? userPriorities : fallbackPriorities;
 
     final String reason = tools.buildDecisionReasonTool(
       todaySpend: todaySpend,

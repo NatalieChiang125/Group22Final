@@ -622,9 +622,9 @@ StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       lng: position.longitude,
       todaySpend: todaySpend,
       dailyBudget: dailyBudget,
+      userPriorities: _sortPriorities,
     );
 
-    _sortPriorities = result.priorities;
 
     debugPrint('Agent 搜尋關鍵字: ${result.searchKeyword}');
     debugPrint('Agent 排序策略: ${result.priorities}');

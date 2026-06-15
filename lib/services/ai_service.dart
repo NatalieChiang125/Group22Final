@@ -579,7 +579,8 @@ Future<Map<String, dynamic>> planRestaurantRecommendationTools({
 使用者狀態：
 今日花費：$todaySpend
 每日預算：$dailyBudget
-目前排序偏好：${jsonEncode(currentPriorities)}
+使用者目前設定的排序偏好 currentPriorities：
+${jsonEncode(currentPriorities)}
 
 請只回傳 JSON，不要 Markdown，不要解釋。
 
@@ -589,26 +590,28 @@ Future<Map<String, dynamic>> planRestaurantRecommendationTools({
     {
       "name": "searchNearbyRestaurantsTool",
       "arguments": {
-        "keyword": "健康餐",
+        "keyword": "餐廳",
         "radiusMeters": 2000
       }
     },
     {
       "name": "rankRestaurantsTool",
       "arguments": {
-        "priorities": ["health", "wiseScore", "distance", "price", "rating"]
+        "priorities": ["wiseScore", "distance", "price", "rating"]
       }
     }
   ],
   "reason": "簡短說明為什麼這樣選"
 }
 
-規則：
-1. 如果今日花費已超過預算，keyword 優先選「小吃」或「便當」，priorities 優先 price、distance。
-2. 如果今日花費接近預算，keyword 優先選「便當」或「自助餐」，priorities 優先 price、distance、health。
-3. 如果預算充足，keyword 可以選「健康餐」或「餐廳」，priorities 優先 health、wiseScore、rating。
-4. priorities 必須至少 4 個。
-5. 不要回傳不存在的工具。
+重要規則：
+1. currentPriorities 是使用者在 setting 裡設定的排序偏好，必須優先尊重。
+2. 如果 dailyBudget > 0 且 todaySpend / dailyBudget < 0.8，代表預算充足，priorities 必須盡量等於 currentPriorities。
+3. 只有在 todaySpend / dailyBudget >= 0.8 時，才可以把 price 或 distance 提到更前面。
+4. 如果 todaySpend > dailyBudget，priorities 可以優先使用 price、distance。
+5. priorities 只能包含 price, distance, health, wiseScore, rating。
+6. priorities 至少要有 4 個。
+7. 不要回傳不存在的工具。
 ''';
 
     debugPrint('準備呼叫 Gemini 規劃餐廳推薦 tools');
