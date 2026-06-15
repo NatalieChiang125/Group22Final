@@ -706,71 +706,108 @@ class FirebaseProvider with ChangeNotifier {
   Future<void> addFriendByShareId(String shareId) async {
     final currentUser = _user;
     if (currentUser == null) {
-    throw Exception('請先登入帳號');
-  }
-
- final String normalizedShareId =
-      shareId.trim().replaceAll('#', '').toUpperCase();
-
-  if (normalizedShareId.isEmpty) {
-    throw Exception('請輸入好友分享 ID');
-  }
-
-  final String myShareId =
-      _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
-
-  if (normalizedShareId == myShareId) {
-    throw Exception('不能加入自己');
-  }
-
-  final QuerySnapshot<Map<String, dynamic>> query = await _db
-      .collection('users')
-      .where('shareId', isEqualTo: normalizedShareId)
-      .limit(1)
-      .get();
-
-  if (query.docs.isEmpty) {
-    throw Exception('找不到這個分享 ID');
-  }
-
-  final QueryDocumentSnapshot<Map<String, dynamic>> friendDoc =
-      query.docs.first;
-
-  final String friendUid = friendDoc.id;
-  final Map<String, dynamic> friendData = friendDoc.data();
-
-  final List<dynamic> currentFriends =
-      List<dynamic>.from(_userProfileJson?['friends'] as List? ?? []);
-
-  final bool alreadyExists = currentFriends.any((friend) {
-    if (friend is String) {
-      return friend == friendUid;
+      throw Exception('請先登入帳號');
     }
 
-    if (friend is Map) {
-      return friend['uid'] == friendUid;
-    }
+    final String normalizedShareId =
+          shareId.trim().replaceAll('#', '').toUpperCase();
 
-    return false;
-  });
+      if (normalizedShareId.isEmpty) {
+        throw Exception('請輸入好友分享 ID');
+      }
 
-  if (alreadyExists) {
-    throw Exception('這位好友已經在清單中');
-  }
+      final String myShareId =
+          _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
 
-  final Map<String, dynamic> friendProfile = {
-    'uid': friendUid,
-    'displayName': friendData['displayName']?.toString() ?? 'Wise User',
-    'photoURL': friendData['photoURL']?.toString() ?? '',
-    'shareId': friendData['shareId']?.toString() ?? normalizedShareId,
-    'score': (friendData['score'] as num?)?.toInt() ?? 0,
-    'achievementsCount':
-        (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
-  };
+      if (normalizedShareId == myShareId) {
+        throw Exception('不能加入自己');
+      }
 
-  await _db.collection('users').doc(currentUser.uid).update({
-    'friends': FieldValue.arrayUnion([friendProfile]),
-  });
+      final QuerySnapshot<Map<String, dynamic>> query = await _db
+          .collection('users')
+          .where('shareId', isEqualTo: normalizedShareId)
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        throw Exception('找不到這個分享 ID');
+      }
+
+      final QueryDocumentSnapshot<Map<String, dynamic>> friendDoc =
+          query.docs.first;
+
+      final String friendUid = friendDoc.id;
+      final Map<String, dynamic> friendData = friendDoc.data();
+
+      final List<dynamic> currentFriends =
+          List<dynamic>.from(_userProfileJson?['friends'] as List? ?? []);
+
+      final bool alreadyExists = currentFriends.any((friend) {
+        if (friend is String) {
+          return friend == friendUid;
+        }
+
+        if (friend is Map) {
+          return friend['uid'] == friendUid;
+        }
+
+        return false;
+      });
+
+      if (alreadyExists) {
+        throw Exception('這位好友已經在清單中');
+      }
+
+      final Map<String, dynamic> friendProfile = {
+        'uid': friendUid,
+        'displayName': friendData['displayName']?.toString() ?? 'Wise User',
+        'photoURL': friendData['photoURL']?.toString() ?? '',
+        'shareId': friendData['shareId']?.toString() ?? normalizedShareId,
+        'score': (friendData['score'] as num?)?.toInt() ?? 0,
+        'achievementsCount':
+            (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
+      };
+
+
+      // 建立自己的資料給對方存
+      final Map<String, dynamic> myProfile = {
+        'uid': currentUser.uid,
+        'displayName':
+            _userProfileJson?['displayName']?.toString() ?? 'Wise User',
+        'photoURL':
+            _userProfileJson?['photoURL']?.toString() ?? '',
+        'shareId':
+            _userProfileJson?['shareId']?.toString() ?? '',
+        'score': userScore,
+        'achievementsCount':
+            (_userProfileJson?['achievementsCount'] as num?)?.toInt() ?? 0,
+      };
+
+
+      // 使用 batch 一次更新雙方
+      final WriteBatch batch = _db.batch();
+
+
+      // A 加入 B
+      batch.update(
+        _db.collection('users').doc(currentUser.uid),
+        {
+          'friends': FieldValue.arrayUnion([friendProfile]),
+        },
+      );
+
+
+      // B 加入 A
+      batch.update(
+        _db.collection('users').doc(friendUid),
+        {
+          'friends': FieldValue.arrayUnion([myProfile]),
+        },
+      );
+
+
+      // 同時完成
+      await batch.commit();
   }
 
   // List<Restaurant> getSmartRecommendations(
