@@ -6,12 +6,14 @@ import 'package:flutter/foundation.dart';
 
 class AIService {
   final GenerativeModel _model;
+  final Map<String, List<MenuCategory>> _menuCache = {};
+  static final Map<String, String> _reasonCache = {};
 
   // 建議將 API Key 放在環境變數或安全的組態中
   AIService({required String apiKey})
     : _model = GenerativeModel(
         model: 'gemini-2.5-flash-lite', // 在 Flutter 行動端穩定支援多模態的型號
-        apiKey: /*'AQ.Ab8RN6Lf-EX0MMItWISiCfrG0CX-Re1uV5uetVskpW7O4TYASA',*/''
+        apiKey: /*'AQ.Ab8RN6Lf-EX0MMItWISiCfrG0CX-Re1uV5uetVskpW7O4TYASA',*/ apiKey,
       );
 
   // 1. 分析食物照片
@@ -229,6 +231,73 @@ class AIService {
   }
 }
 
+Future<String> generateRestaurantReason({
+  required String restaurantName,
+  required double todaySpend,
+  required double dailyBudget,
+  required int wiseScore,
+  required double rating,
+  required double distanceKm,
+  required String priceLevel,
+  required bool isOpen,
+  List<String> priorities = const [],
+}) async {
+  final String cacheKey =
+      '$restaurantName-$wiseScore-$rating-$distanceKm-$priceLevel-$isOpen';
+
+  if (_reasonCache.containsKey(cacheKey)) {
+    debugPrint('使用快取推薦理由: $restaurantName');
+    return _reasonCache[cacheKey]!;
+  }
+
+  try {
+    final String prompt = '''
+請為餐廳「$restaurantName」產生 WiseBite 推薦指數下方的一句推薦理由。
+
+資料：
+分數：$wiseScore
+評分：$rating
+距離：${distanceKm.toStringAsFixed(1)} 公里
+價格：$priceLevel
+營業中：$isOpen
+
+規則：
+1. 繁體中文。
+2. 35 字以內。
+3. 要提到這間餐廳的特色或推薦原因。
+4. 不要 Markdown。
+5. 不要保證營養一定正確。
+''';
+
+    debugPrint('準備呼叫 Gemini 產生餐廳推薦理由：$restaurantName');
+
+    final GenerateContentResponse response = await _model.generateContent(
+      [Content.text(prompt)],
+      generationConfig: GenerationConfig(
+        maxOutputTokens: 100,
+        temperature: 0.4,
+      ),
+    );
+
+    final String result = response.text?.trim() ?? '';
+
+    if (result.isEmpty) {
+      throw Exception('Gemini 沒有回傳推薦理由');
+    }
+
+    _reasonCache[cacheKey] = result;
+
+    debugPrint('Gemini 餐廳推薦理由：$result');
+
+    return result;
+  } catch (e, stackTrace) {
+    debugPrint('Gemini 產生餐廳推薦理由失敗: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    throw Exception('AI 推薦理由產生失敗，請稍後再試。');
+  }
+}
+
   // 5. 獲取下一餐飲食推薦
   Future<String> getNextMealRecommendation({
     required Nutrients currentIntake,
@@ -299,61 +368,270 @@ $budgetInfo
       throw Exception('Gemini 暫時無法產生下一餐建議');
     }
   }
+  Future<List<String>> decideRestaurantPriorities({
+  required double todaySpend,
+  required double dailyBudget,
+  required List<String> currentPriorities,
+}) async {
+  try {
+    final String prompt = '''
+你是 WiseBite 的餐廳推薦 Agent。
+
+你的任務是根據使用者今日花費與每日預算，決定餐廳推薦排序優先順序。
+
+可使用的排序條件只有以下五種：
+- wiseScore
+- distance
+- price
+- rating
+- health
+
+使用者今日花費：$todaySpend
+使用者每日預算：$dailyBudget
+目前排序偏好：${jsonEncode(currentPriorities)}
+
+請只回傳 JSON，不要加入 Markdown 或其他文字。
+
+格式：
+{
+  "priorities": ["price", "distance", "health", "wiseScore", "rating"]
+}
+
+規則：
+1. 如果 todaySpend > dailyBudget，優先考慮 price。
+2. 如果 todaySpend 接近 dailyBudget，也優先考慮 price 和 distance。
+3. 如果預算還足夠，優先考慮 health、wiseScore、rating。
+4. priorities 只能包含 wiseScore、distance、price、rating、health。
+5. priorities 至少要有 4 個項目。
+''';
+
+    debugPrint('準備呼叫 Gemini 決定餐廳推薦排序策略');
+
+    final GenerateContentResponse response = await _model.generateContent(
+      [Content.text(prompt)],
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+      ),
+    );
+
+    final String text = response.text ?? '{}';
+    debugPrint('Gemini 推薦策略回傳：$text');
+
+    final Map<String, dynamic> data =
+        jsonDecode(text) as Map<String, dynamic>;
+
+    final List<String> allowed = [
+      'wiseScore',
+      'distance',
+      'price',
+      'rating',
+      'health',
+    ];
+
+    final List<String> priorities =
+        List<String>.from(data['priorities'] ?? [])
+            .where((priority) => allowed.contains(priority))
+            .toList();
+
+    if (priorities.isEmpty) {
+      return currentPriorities;
+    }
+
+    // 補齊沒有出現的排序條件，避免 AI 少回傳導致排序太弱
+    for (final item in allowed) {
+      if (!priorities.contains(item)) {
+        priorities.add(item);
+      }
+    }
+
+    return priorities;
+  } catch (e, stackTrace) {
+    debugPrint('Gemini 決定推薦策略失敗: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    return currentPriorities;
+  }
+}
 
   Future<List<MenuCategory>> fetchRealMenuFromAI(String restaurantName) async {
-    try {
-      final prompt =
-          '''
-你是一個台灣美食與營養學數據庫。請幫我查詢或精確估算位於台灣新竹清華大學附近的真實餐廳「$restaurantName」的核心招牌菜單品項與價格。
+  if (_menuCache.containsKey(restaurantName)) {
+    debugPrint('使用快取菜單: $restaurantName');
+    return _menuCache[restaurantName]!;
+  }
 
-請只回傳 JSON，不要加入 Markdown 標記（例如不要寫 ```json）或任何多餘文字。
+  try {
+    final prompt = '''
+請根據餐廳名稱「$restaurantName」，估算新竹清大附近常見菜單。
 
-格式必須完全符合：
+只回傳 JSON array，不要 Markdown。
+
+格式：
 [
   {
-    "categoryName": "分類名稱(例如: 熱門主餐、湯品飲品)",
+    "categoryName": "主廚精選推薦品項",
     "items": [
-      {
-        "name": "真實餐點料理名稱",
-        "price": 120,
-        "calories": 450
-      }
+      {"name": "餐點名稱", "price": 120, "calories": 450}
     ]
   }
 ]
 
 規則：
-1. 請務必貼近該餐廳在真實世界的招牌料理名稱（例如綠野仙蹤就要有舒肥雞餐盒）。
-2. 價格必須符合新竹清大當地的實體店面真實消費水平，不要亂編。
-3. 如果該店真的太冷門找不到，請依據店名類型（例如咖啡廳、小吃店）給予最合理、最具代表性的 3 道料理。
+1. 只給 3 道品項。
+2. 價格使用台幣整數。
+3. 熱量使用整數。
 ''';
 
-      debugPrint('WiseBite AI Agent 正透過大數據查詢餐廳真實菜單: $restaurantName');
+    debugPrint('準備呼叫 Gemini 查菜單: $restaurantName');
 
-      // 💡 修正處：將原本的 _model 改回 _model 即可
-      final response = await _model.generateContent(
-        [Content.text(prompt)],
-        generationConfig: GenerationConfig(
-          responseMimeType: 'application/json',
-        ),
-      );
+    final response = await _model.generateContent(
+      [Content.text(prompt)],
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        maxOutputTokens: 300,
+    temperature: 0.2,
+      ),
+    );
 
-      final String text = response.text ?? '[]';
-      debugPrint('AI 真實菜單回傳：$text');
+    final String rawText = response.text ?? '';
+    debugPrint('Gemini 菜單原始回傳：$rawText');
 
-      final List<dynamic> decoded = jsonDecode(text) as List<dynamic>;
-
-      // 解析並對齊你們 types.dart 的 MenuCategory 結構
-      return decoded.map((cat) {
-        final Map<String, dynamic> catMap = Map<String, dynamic>.from(
-          cat as Map,
-        );
-        return MenuCategory.fromJson(catMap);
-      }).toList();
-    } catch (e, stackTrace) {
-      debugPrint('AI 獲取真實菜單失敗: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      return []; // 失敗時回傳空陣列保底
+    if (rawText.trim().isEmpty) {
+      throw Exception('Gemini 沒有回傳菜單內容');
     }
+
+    final String cleanedText = rawText
+        .replaceAll('```json', '')
+        .replaceAll('```', '')
+        .trim();
+
+    final dynamic decoded = jsonDecode(cleanedText);
+
+    if (decoded is! List) {
+      throw Exception('Gemini 回傳格式不是 JSON array：$cleanedText');
+    }
+
+    final List<MenuCategory> menu = decoded.map((cat) {
+      final Map<String, dynamic> catMap =
+          Map<String, dynamic>.from(cat as Map);
+      return MenuCategory.fromJson(catMap);
+    }).toList();
+
+    if (menu.isEmpty) {
+      throw Exception('Gemini 回傳空菜單');
+    }
+
+    _menuCache[restaurantName] = menu;
+
+    return menu;
+  } catch (e, stackTrace) {
+    debugPrint('AI 獲取真實菜單失敗: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    final errorText = e.toString();
+
+    if (errorText.contains('quota') ||
+        errorText.contains('Quota') ||
+        errorText.contains('rate') ||
+        errorText.contains('exceeded')) {
+      throw Exception('Gemini 額度已達上限，請稍後再試，或減少 AI 呼叫次數。');
+    }
+
+    if (errorText.contains('API key') ||
+        errorText.contains('permission') ||
+        errorText.contains('403') ||
+        errorText.contains('401')) {
+      throw Exception('Gemini API key 無效或沒有權限，請檢查 GEMINI_API_KEY。');
+    }
+
+    if (errorText.contains('FormatException')) {
+      throw Exception('Gemini 回傳的菜單格式不是正確 JSON，請查看 Terminal 原始回傳。');
+    }
+
+    throw Exception('AI 精選菜單載入失敗：$e');
   }
+}
+
+Future<Map<String, dynamic>> planRestaurantRecommendationTools({
+  required double todaySpend,
+  required double dailyBudget,
+  required List<String> currentPriorities,
+}) async {
+  try {
+    final String prompt = '''
+你是 WiseBite 的餐廳推薦 Agent Planner。
+
+請根據使用者今日花費與每日預算，決定接下來要使用哪些工具。
+
+可用工具如下：
+
+1. searchNearbyRestaurantsTool
+用途：搜尋附近餐廳
+參數：
+- keyword: 搜尋關鍵字，例如「小吃」、「便當」、「健康餐」、「餐廳」、「咖啡」、「日式料理」
+- radiusMeters: 搜尋半徑，最多 3000
+
+2. rankRestaurantsTool
+用途：根據排序策略排序餐廳
+參數：
+- priorities: 排序優先順序，只能使用以下值：
+  price, distance, health, wiseScore, rating
+
+使用者狀態：
+今日花費：$todaySpend
+每日預算：$dailyBudget
+目前排序偏好：${jsonEncode(currentPriorities)}
+
+請只回傳 JSON，不要 Markdown，不要解釋。
+
+格式：
+{
+  "toolCalls": [
+    {
+      "name": "searchNearbyRestaurantsTool",
+      "arguments": {
+        "keyword": "健康餐",
+        "radiusMeters": 2000
+      }
+    },
+    {
+      "name": "rankRestaurantsTool",
+      "arguments": {
+        "priorities": ["health", "wiseScore", "distance", "price", "rating"]
+      }
+    }
+  ],
+  "reason": "簡短說明為什麼這樣選"
+}
+
+規則：
+1. 如果今日花費已超過預算，keyword 優先選「小吃」或「便當」，priorities 優先 price、distance。
+2. 如果今日花費接近預算，keyword 優先選「便當」或「自助餐」，priorities 優先 price、distance、health。
+3. 如果預算充足，keyword 可以選「健康餐」或「餐廳」，priorities 優先 health、wiseScore、rating。
+4. priorities 必須至少 4 個。
+5. 不要回傳不存在的工具。
+''';
+
+    debugPrint('準備呼叫 Gemini 規劃餐廳推薦 tools');
+
+    final response = await _model.generateContent(
+      [Content.text(prompt)],
+      generationConfig: GenerationConfig(
+        responseMimeType: 'application/json',
+        maxOutputTokens: 300,
+        temperature: 0.2,
+      ),
+    );
+
+    final String text = response.text ?? '{}';
+
+    debugPrint('Gemini tool planning 回傳：$text');
+
+    return jsonDecode(text) as Map<String, dynamic>;
+  } catch (e, stackTrace) {
+    debugPrint('Gemini tool planning 失敗: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    throw Exception('AI 工具規劃失敗');
+  }
+}
 }

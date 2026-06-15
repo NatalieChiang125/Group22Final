@@ -36,7 +36,9 @@ class GooglePlacesService {
         //'https://us-central1-wisebite.cloudfunctions.net/getRestaurants';
         'https://getrestaurants-u6btwhutza-uc.a.run.app';
 
-    final Uri url = Uri.parse('$functionUrl?lat=$lat&lng=$lng');
+    final Uri url = Uri.parse(
+  '$functionUrl?lat=$lat&lng=$lng&keyword=${Uri.encodeComponent(keyword)}',
+);
 
     final response = await http.get(url);
 
@@ -81,9 +83,11 @@ class GooglePlacesService {
       final List<String> rawTypes = (place['types'] as List? ?? [])
           .map((type) => type.toString())
           .toList();
-      final int priceLevel = place['price_level'] is num
-          ? (place['price_level'] as num).toInt()
-          : -1;
+      final dynamic rawPriceLevel = place['price_level'] ?? place['priceLevel'];
+
+final int priceLevel = rawPriceLevel is num
+    ? rawPriceLevel.toInt()
+    : int.tryParse(rawPriceLevel?.toString() ?? '') ?? -1;
       final double placeLat = (location['lat'] as num? ?? lat).toDouble();
       final double placeLng = (location['lng'] as num? ?? lng).toDouble();
       final int wiseScore = _buildWiseScore(
@@ -94,9 +98,9 @@ class GooglePlacesService {
         types: rawTypes,
       );
 
-      final List<MenuCategory> realMenu = await aiService.fetchRealMenuFromAI(
+      /*final List<MenuCategory> realMenu = await aiService.fetchRealMenuFromAI(
         name,
-      );
+      );*/
 
       return Restaurant(
         id: placeId,
@@ -131,7 +135,7 @@ class GooglePlacesService {
         menuUrl:
             'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(name)}&query_place_id=$placeId',
         menuPhotos: [],
-        menuItems: realMenu,
+        menuItems: [],
 
         isHealthy: rating >= 4.2,
 
@@ -165,13 +169,26 @@ class GooglePlacesService {
   //   }
   // }
   String _mapPriceLevel(dynamic level) {
-    final intLevel = int.tryParse(level.toString());
+  final intLevel = int.tryParse(level.toString());
 
-    if (intLevel == null) return '未提供價格資訊';
-    print('map input = $level (${level.runtimeType})');
-
-    return '\$' * intLevel;
+  if (intLevel == null || intLevel < 0) {
+    return '未提供價格資訊';
   }
+
+  if (intLevel <= 1) {
+    return r'$';
+  }
+
+  if (intLevel == 2) {
+    return r'$$';
+  }
+
+  if (intLevel == 3) {
+    return r'$$$';
+  }
+
+  return r'$$$$';
+}
 
   int _buildWiseScore({
     required double rating,

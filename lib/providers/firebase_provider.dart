@@ -14,6 +14,7 @@ import '../services/google_places_service.dart';
 
 import 'package:geolocator/geolocator.dart';
 import '../services/ai_service.dart';
+import '../services/restaurant_agent_service.dart';
 
 List<Restaurant> _processRestaurantsInBackground(Map<String, dynamic> args) {
   final List<Restaurant> list = args['list'] as List<Restaurant>;
@@ -124,7 +125,14 @@ class FirebaseProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   final GooglePlacesService _googlePlacesService = GooglePlacesService();
 
-  final AIService _aiService = AIService(apiKey: '');
+  static const String _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+
+late final AIService _aiService = AIService(apiKey: _geminiApiKey);
+late final RestaurantAgentService _restaurantAgentService =
+    RestaurantAgentService(
+  googlePlacesService: _googlePlacesService,
+  aiService: _aiService,
+);
 
   User? _user;
   Map<String, dynamic>? _userProfileJson;
@@ -601,45 +609,42 @@ StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
     }
   }
 
-  Future<List<Restaurant>> getSortedRestaurants(
-    double todaySpend,
-    double dailyBudget,
-  ) async {
-    try {
-      final Position position = await _getCurrentPosition();
+ Future<List<Restaurant>> getSortedRestaurants(
+  double todaySpend,
+  double dailyBudget,
+) async {
+  try {
+    final Position position = await _getCurrentPosition();
 
-      final priorities = _sortPriorities;
+    final AgentRestaurantResult result =
+        await _restaurantAgentService.recommendRestaurants(
+      lat: position.latitude,
+      lng: position.longitude,
+      todaySpend: todaySpend,
+      dailyBudget: dailyBudget,
+    );
 
-      List<Restaurant> list = await _googlePlacesService
-          .getNearbyRestaurants(
-            position.latitude,
-            position.longitude,
-            _aiService,
-          )
-          .timeout(const Duration(seconds: 5));
+    _sortPriorities = result.priorities;
 
-      if (list.isEmpty) {
-        list = List<Restaurant>.from(mockRestaurants);
-      }
+    debugPrint('Agent 搜尋關鍵字: ${result.searchKeyword}');
+    debugPrint('Agent 排序策略: ${result.priorities}');
+    debugPrint('Agent 決策理由: ${result.decisionReason}');
 
-      final bool isOverBudget = todaySpend > dailyBudget;
-      final sortedList = await compute(_processRestaurantsInBackground, {
-        'list': list,
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'isOverBudget': isOverBudget,
-        'priorities': priorities,
-      });
-
-      return sortedList;
-    } catch (e) {
-      debugPrint('餐廳推薦錯誤: $e');
-
+    if (result.restaurants.isEmpty) {
       return mockRestaurants
           .map((r) => Restaurant.fromJson(r.toJson()))
           .toList();
     }
+
+    return result.restaurants;
+  } catch (e) {
+    debugPrint('RestaurantAgent 推薦失敗: $e');
+
+    return mockRestaurants
+        .map((r) => Restaurant.fromJson(r.toJson()))
+        .toList();
   }
+}
 
   Future<Position> _getCurrentPosition() async {
     final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();

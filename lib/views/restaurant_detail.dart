@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 // 💡 優化：移除本地重複定義的 Restaurant Class，統一引入全域型態
 import 'package:wisebite/models/types.dart';
 import 'package:wisebite/views/universal_image.dart';
+import 'package:wisebite/services/ai_service.dart';
 
 class RestaurantDetail extends StatefulWidget {
   // 💡 這裡的 Restaurant 將直接對齊 mock_data.dart 與 types.dart 的完整結構
@@ -24,6 +25,29 @@ class RestaurantDetail extends StatefulWidget {
 class _RestaurantDetailState extends State<RestaurantDetail> {
   String _activeTab = 'ai'; // 'ai' | 'menu'
 
+  final AIService _aiService = AIService(
+    apiKey: const String.fromEnvironment('GEMINI_API_KEY'),
+  );
+
+  bool _isLoadingMenu = false;
+  bool _hasLoadedMenu = false;
+  String? _menuError;
+  List<MenuCategory> _aiMenuItems = [];
+
+  bool _isLoadingReason = false;
+bool _hasLoadedReason = false;
+String? _aiReason;
+String? _reasonError;
+
+@override
+void initState() {
+  super.initState();
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _loadAiReason();
+  });
+}
+
   Future<void> _openUrl(String? urlString) async {
     if (urlString == null || urlString.isEmpty) return;
     final uri = Uri.parse(urlString);
@@ -31,6 +55,94 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
       debugPrint("Could not launch $urlString");
     }
   }
+
+  Future<void> _loadAiReason() async {
+  if (_isLoadingReason || _hasLoadedReason) return;
+
+  setState(() {
+    _isLoadingReason = true;
+    _reasonError = null;
+  });
+
+  try {
+    final rest = widget.restaurant;
+
+    final String reason = await _aiService.generateRestaurantReason(
+      restaurantName: rest.name,
+      todaySpend: 0,
+      dailyBudget: 0,
+      wiseScore: rest.wiseScore,
+      rating: rest.rating,
+      distanceKm: rest.computedDistance ?? 0,
+      priceLevel: rest.priceRange,
+      isOpen: rest.deliveryTime == '營業中',
+      priorities: const ['wiseScore', 'health', 'price', 'distance', 'rating'],
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _aiReason = reason;
+      _hasLoadedReason = true;
+    });
+  } catch (e) {
+    debugPrint('載入 AI 推薦理由失敗: $e');
+
+    if (!mounted) return;
+
+    setState(() {
+      _reasonError = e.toString().replaceFirst('Exception: ', '');
+      _hasLoadedReason = true;
+    });
+  } finally {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingReason = false;
+    });
+  }
+}
+  Future<void> _loadAiMenu() async {
+  if (_isLoadingMenu || _hasLoadedMenu) return;
+
+  setState(() {
+    _isLoadingMenu = true;
+    _menuError = null;
+  });
+
+  try {
+    debugPrint(
+      'GEMINI_API_KEY is empty: '
+      '${const String.fromEnvironment('GEMINI_API_KEY').isEmpty}',
+    );
+
+    final List<MenuCategory> menu = await _aiService.fetchRealMenuFromAI(
+      widget.restaurant.name,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _aiMenuItems = menu;
+      _hasLoadedMenu = true;
+    });
+  } catch (e) {
+    debugPrint('載入 AI 精選菜單失敗: $e');
+
+    if (!mounted) return;
+
+    setState(() {
+      _menuError = e.toString().replaceFirst('Exception: ', '');
+      _hasLoadedMenu = true;
+    });
+  } finally {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingMenu = false;
+    });
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -294,7 +406,17 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
     final bool isActive = _activeTab == tabKey;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _activeTab = tabKey),
+        onTap: () {
+  setState(() => _activeTab = tabKey);
+
+  if (tabKey == 'menu') {
+    _loadAiMenu();
+  }
+
+  if (tabKey == 'ai') {
+  _loadAiReason();
+}
+},
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           alignment: Alignment.center,
@@ -323,6 +445,11 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
     List<String> warnings,
   ) {
     final int score = rest.wiseScore;
+    final String wiseReason = (rest.wiseReason ?? '').toString().trim();
+    final String displayReason =
+    (_aiReason != null && _aiReason!.trim().isNotEmpty)
+        ? _aiReason!.trim()
+        : wiseReason;
     Color scoreColor = Colors.green;
     if (score < 60)
       scoreColor = Colors.red;
@@ -360,52 +487,67 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
                 ),
               ),
               const SizedBox(width: 16),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'WiseBite 推薦指數',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '此評分結合了你今日的剩餘預算目標與當前所需的蛋白質缺口計算。',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+              Expanded(
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'WiseBite 推薦指數',
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w900,
+          color: Color(0xFF0F172A),
         ),
-        const SizedBox(height: 20),
+      ),
+      const SizedBox(height: 2),
+      const Text(
+        '此評分結合了你今日的剩餘預算目標與當前所需的蛋白質缺口計算。',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.black54,
+          height: 1.3,
+        ),
+      ),
 
-        // AI 建議詳情理由
-        const Text(
-          'AI 推薦觀點',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF0F172A),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          rest.wiseReason.isEmpty ? '暫無 AI 分析推薦理由。' : rest.wiseReason,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFF475569),
-            height: 1.5,
-            fontWeight: FontWeight.w500,
+      const SizedBox(height: 8),
+
+if (_isLoadingReason)
+  const Text(
+    'AI 正在產生這間餐廳的推薦理由...',
+    style: TextStyle(
+      fontSize: 12,
+      color: Color(0xFF64748B),
+      height: 1.35,
+      fontWeight: FontWeight.w600,
+    ),
+  )
+else if (displayReason.isNotEmpty)
+  Text(
+    displayReason,
+    style: const TextStyle(
+      fontSize: 12,
+      color: Color(0xFF475569),
+      height: 1.35,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
+
+if (_reasonError != null) ...[
+  const SizedBox(height: 6),
+  Text(
+    _reasonError!,
+    style: const TextStyle(
+      fontSize: 11,
+      color: Colors.orange,
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
+],
+    ],
+  ),
+),
+            ],
           ),
         ),
         const SizedBox(height: 20),
@@ -487,48 +629,118 @@ class _RestaurantDetailState extends State<RestaurantDetail> {
 
   // 精選選單分頁
   Widget _buildMenuSection(Restaurant rest) {
-    // 💡 1. 收集整家餐廳所有分類下的所有餐點，打平成一個單層的 List
-    final List<MenuItem> allFlattenedItems = [];
-    if (rest.menuItems != null) {
-      for (var category in rest.menuItems!) {
-        if (category.items != null) {
-          allFlattenedItems.addAll(category.items!);
-        }
-      }
-    }
+  if (_isLoadingMenu) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            'AI 正在產生精選菜單...',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // 💡 2. 空狀態防禦：如果這家餐廳真的撈不出任何料理，顯示精美提示
-    if (allFlattenedItems.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(24),
+if (_menuError != null) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+    decoration: BoxDecoration(
+      color: Colors.grey.shade50,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.grey.shade100),
+    ),
+    child: Column(
+      children: [
+        Icon(
+          Icons.info_outline_rounded,
+          size: 32,
+          color: Colors.grey.shade500,
         ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.layers_clear_outlined,
-              size: 40,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '暫無精選選單資料',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
+        const SizedBox(height: 12),
+        Text(
+          _menuError!,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.5,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
+          ),
         ),
-      );
+        const SizedBox(height: 14),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _hasLoadedMenu = false;
+              _menuError = null;
+              _aiMenuItems = [];
+            });
+            _loadAiMenu();
+          },
+          child: const Text('重新載入'),
+        ),
+      ],
+    ),
+  );
+}
+
+  final List<MenuCategory> menuSource =
+      _aiMenuItems.isNotEmpty ? _aiMenuItems : (rest.menuItems ?? []);
+
+  final List<MenuItem> allFlattenedItems = [];
+
+  for (var category in menuSource) {
+    if (category.items != null) {
+      allFlattenedItems.addAll(category.items!);
     }
+  }
 
     // 💡 3. 核心限流：利用 .take(3) 嚴格限制整家餐廳總共只抓前 3 筆餐點
     final List<MenuItem> finalDisplayItems = allFlattenedItems.take(3).toList();
+
+    if (finalDisplayItems.isEmpty) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+    decoration: BoxDecoration(
+      color: Colors.grey.shade50,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.grey.shade100),
+    ),
+    child: Column(
+      children: [
+        Icon(
+          Icons.restaurant_menu_rounded,
+          size: 32,
+          color: Colors.grey.shade500,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '暫無精選菜單資料，請稍後再試。',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

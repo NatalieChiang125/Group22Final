@@ -307,13 +307,8 @@ class _DashboardViewState extends State<DashboardView> {
 
     // 保底防線：如果剛好沒這家店的菜單資料，才用級距猜測大概金額
     if (estCost == 0.0) {
-      if (priceRange.contains('\$\$\$'))
-        estCost = 400.0;
-      else if (priceRange.contains('\$\$'))
-        estCost = 220.0;
-      else
-        estCost = 120.0;
-    }
+  estCost = _estimateCostByRestaurant(restaurant);
+}
 
     // 💡 2. 決定平價/中價位/高價位的文字標籤
     String priceLabel = '平價';
@@ -396,7 +391,7 @@ class _DashboardViewState extends State<DashboardView> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '預估價格:$priceRange \$${estCost.toStringAsFixed(0)}', // 秀出實際算出來的價格
+                      '預估價格: \$${estCost.toStringAsFixed(0)}', // 秀出實際算出來的價格
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w900,
@@ -467,6 +462,61 @@ class _DashboardViewState extends State<DashboardView> {
       ),
     );
   }
+
+  double _estimateCostByRestaurant(Restaurant restaurant) {
+  final String name = restaurant.name.toLowerCase();
+  final String priceRange = restaurant.priceRange;
+
+  if (priceRange.contains(r'$$$$')) {
+    return 600.0;
+  }
+
+  if (priceRange.contains(r'$$$')) {
+    return 400.0;
+  }
+
+  if (priceRange.contains(r'$$')) {
+    return 220.0;
+  }
+
+  if (name.contains('壽司') ||
+      name.contains('sushi') ||
+      name.contains('燒肉') ||
+      name.contains('火鍋') ||
+      name.contains('牛排') ||
+      name.contains('海鮮')) {
+    return 280.0;
+  }
+
+  if (name.contains('港式') ||
+      name.contains('茶餐廳') ||
+      name.contains('咖哩') ||
+      name.contains('義大利') ||
+      name.contains('拉麵')) {
+    return 180.0;
+  }
+
+  if (name.contains('自助') ||
+      name.contains('百匯') ||
+      name.contains('吃到飽')) {
+    return 350.0;
+  }
+
+  if (name.contains('咖啡') ||
+      name.contains('cafe') ||
+      name.contains('輕食')) {
+    return 160.0;
+  }
+
+  if (name.contains('小吃') ||
+      name.contains('便當') ||
+      name.contains('麵') ||
+      name.contains('飯')) {
+    return 120.0;
+  }
+
+  return 150.0;
+}
 
   Widget _buildTag(String text, Color background, Color foreground) {
     return Container(
