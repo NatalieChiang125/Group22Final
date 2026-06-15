@@ -131,8 +131,13 @@ class FirebaseProvider with ChangeNotifier {
 
   List<MealRecord> _records = [];
   List<Restaurant> _restaurants = [];
+  List<FriendProfile> _friends = [];
+StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+    _friendshipsSubscription;
 
   bool _loading = true;
+
+  List<FriendProfile> get friends => _friends;
 
 
   List<String> _sortPriorities = ['wiseScore', 'distance', 'price', 'rating'];
@@ -166,16 +171,26 @@ class FirebaseProvider with ChangeNotifier {
 
   int get userStreak => _calculateStreak(_records);
   int get userScore {
-    if (_records.isEmpty) return 0;
-
-    final avg =
-        _records.map((r) => r.healthScore).reduce((a, b) => a + b) /
-        _records.length;
-
-    final streakBonus = userStreak * 5;
-
-    return (avg + streakBonus).round();
+  if (_records.isEmpty) {
+    return 0;
   }
+
+  final List<MealRecord> recentRecords =
+      _records.take(7).toList();
+
+  final double averageHealthScore =
+      recentRecords
+              .map((MealRecord record) => record.healthScore)
+              .reduce((int a, int b) => a + b) /
+          recentRecords.length;
+
+  final int streakBonus = userStreak * 2;
+
+  final int score =
+      (averageHealthScore + streakBonus).round();
+
+  return score.clamp(0, 100);
+}
 
   FirebaseProvider() {
     _initAuthListener();
@@ -218,6 +233,7 @@ class FirebaseProvider with ChangeNotifier {
     _initProfileListener(uid);
     _initRecordsListener(uid);
     _initRestaurantsListener();
+    _initFriendshipsListener(uid);
   }
 
   void _initProfileListener(String uid) {
@@ -252,6 +268,8 @@ class FirebaseProvider with ChangeNotifier {
           'photoURL': _user?.photoURL ?? '',
           'shareId': 'WISE_${uid.substring(0, 5).toUpperCase()}',
           'friends': [],
+          'score': 0,
+  'streak': 0,
           'stats': {
             'goals': {
               'calories': 2000,
@@ -313,6 +331,21 @@ class FirebaseProvider with ChangeNotifier {
     );
   }
 
+  Future<void> _syncUserSocialScore(String uid) async {
+  try {
+    final int score = userScore;
+    final int streak = userStreak;
+
+    await _db.collection('users').doc(uid).update({
+      'score': score,
+      'streak': streak,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    debugPrint('同步社群分數失敗：$error');
+  }
+}
+
   void _initRecordsListener(String uid) {
     final CollectionReference<Map<String, dynamic>> recordsRef = _db
         .collection('users')
@@ -334,6 +367,8 @@ class FirebaseProvider with ChangeNotifier {
             }).toList();
 
             _loading = false;
+
+            _syncUserSocialScore(uid);
 
             notifyListeners();
           },
@@ -703,112 +738,113 @@ class FirebaseProvider with ChangeNotifier {
     return streak;
   }
 
-  Future<void> addFriendByShareId(String shareId) async {
-    final currentUser = _user;
-    if (currentUser == null) {
-      throw Exception('請先登入帳號');
+Future<void> addFriendByShareId(String shareId) async {
+  final User? currentUser = _user;
+
+  if (currentUser == null) {
+    throw Exception('請先登入帳號');
+  }
+
+  final String normalizedShareId =
+      shareId.trim().replaceAll('#', '').toUpperCase();
+
+  if (normalizedShareId.isEmpty) {
+    throw Exception('請輸入好友分享 ID');
+  }
+
+  final String myShareId =
+      _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
+
+  if (normalizedShareId == myShareId) {
+    throw Exception('不能加入自己');
+  }
+
+  final query = await _db
+      .collection('users')
+      .where('shareId', isEqualTo: normalizedShareId)
+      .limit(1)
+      .get();
+
+  if (query.docs.isEmpty) {
+    throw Exception('找不到這個分享 ID');
+  }
+
+  final friendDoc = query.docs.first;
+  final String friendUid = friendDoc.id;
+
+  final List<String> sortedUsers = [
+    currentUser.uid,
+    friendUid,
+  ]..sort();
+
+  final String friendshipId =
+      '${sortedUsers[0]}_${sortedUsers[1]}';
+
+  final friendshipRef =
+      _db.collection('friendships').doc(friendshipId);
+
+
+  await friendshipRef.set({
+    'users': sortedUsers,
+    'createdBy': currentUser.uid,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+  void _initFriendshipsListener(String uid) {
+  _friendshipsSubscription?.cancel();
+
+  _friendshipsSubscription = _db
+      .collection('friendships')
+      .where('users', arrayContains: uid)
+      .snapshots()
+      .listen((snapshot) async {
+    final List<FriendProfile> loadedFriends = [];
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+
+      final List<dynamic> users =
+          List<dynamic>.from(data['users'] as List? ?? []);
+
+      final String? friendUid = users
+          .map((e) => e.toString())
+          .firstWhere(
+            (userId) => userId != uid,
+            orElse: () => '',
+          );
+
+      if (friendUid == null || friendUid.isEmpty) {
+        continue;
+      }
+
+      final friendDoc =
+          await _db.collection('users').doc(friendUid).get();
+
+      if (!friendDoc.exists) {
+        continue;
+      }
+
+      final friendData = friendDoc.data() ?? {};
+
+      loadedFriends.add(
+        FriendProfile(
+          uid: friendUid,
+          displayName:
+              friendData['displayName']?.toString() ?? 'Wise User',
+          photoURL: friendData['photoURL']?.toString(),
+          score: (friendData['score'] as num?)?.toInt() ?? 0,
+          shareId: friendData['shareId']?.toString() ?? '',
+          achievementsCount:
+              (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
+        ),
+      );
     }
 
-    final String normalizedShareId =
-          shareId.trim().replaceAll('#', '').toUpperCase();
-
-      if (normalizedShareId.isEmpty) {
-        throw Exception('請輸入好友分享 ID');
-      }
-
-      final String myShareId =
-          _userProfileJson?['shareId']?.toString().toUpperCase() ?? '';
-
-      if (normalizedShareId == myShareId) {
-        throw Exception('不能加入自己');
-      }
-
-      final QuerySnapshot<Map<String, dynamic>> query = await _db
-          .collection('users')
-          .where('shareId', isEqualTo: normalizedShareId)
-          .limit(1)
-          .get();
-
-      if (query.docs.isEmpty) {
-        throw Exception('找不到這個分享 ID');
-      }
-
-      final QueryDocumentSnapshot<Map<String, dynamic>> friendDoc =
-          query.docs.first;
-
-      final String friendUid = friendDoc.id;
-      final Map<String, dynamic> friendData = friendDoc.data();
-
-      final List<dynamic> currentFriends =
-          List<dynamic>.from(_userProfileJson?['friends'] as List? ?? []);
-
-      final bool alreadyExists = currentFriends.any((friend) {
-        if (friend is String) {
-          return friend == friendUid;
-        }
-
-        if (friend is Map) {
-          return friend['uid'] == friendUid;
-        }
-
-        return false;
-      });
-
-      if (alreadyExists) {
-        throw Exception('這位好友已經在清單中');
-      }
-
-      final Map<String, dynamic> friendProfile = {
-        'uid': friendUid,
-        'displayName': friendData['displayName']?.toString() ?? 'Wise User',
-        'photoURL': friendData['photoURL']?.toString() ?? '',
-        'shareId': friendData['shareId']?.toString() ?? normalizedShareId,
-        'score': (friendData['score'] as num?)?.toInt() ?? 0,
-        'achievementsCount':
-            (friendData['achievementsCount'] as num?)?.toInt() ?? 0,
-      };
-
-
-      // 建立自己的資料給對方存
-      final Map<String, dynamic> myProfile = {
-        'uid': currentUser.uid,
-        'displayName':
-            _userProfileJson?['displayName']?.toString() ?? 'Wise User',
-        'photoURL':
-            _userProfileJson?['photoURL']?.toString() ?? '',
-        'shareId':
-            _userProfileJson?['shareId']?.toString() ?? '',
-        'score': userScore,
-        'achievementsCount':
-            (_userProfileJson?['achievementsCount'] as num?)?.toInt() ?? 0,
-      };
-
-
-      // 使用 batch 一次更新雙方
-      final WriteBatch batch = _db.batch();
-
-
-      // A 加入 B
-      batch.update(
-        _db.collection('users').doc(currentUser.uid),
-        {
-          'friends': FieldValue.arrayUnion([friendProfile]),
-        },
-      );
-
-
-      // B 加入 A
-      batch.update(
-        _db.collection('users').doc(friendUid),
-        {
-          'friends': FieldValue.arrayUnion([myProfile]),
-        },
-      );
-
-
-      // 同時完成
-      await batch.commit();
-  }
+    _friends = loadedFriends;
+    notifyListeners();
+  });
+}
 
   // List<Restaurant> getSmartRecommendations(
   //   double todaySpend,
@@ -847,6 +883,10 @@ class FirebaseProvider with ChangeNotifier {
     _profileSubscription?.cancel();
     _recordsSubscription?.cancel();
     _restaurantsSubscription?.cancel();
+
+    _friendshipsSubscription?.cancel();
+_friendshipsSubscription = null;
+_friends = [];
 
     _profileSubscription = null;
     _recordsSubscription = null;

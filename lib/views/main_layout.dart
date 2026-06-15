@@ -37,7 +37,6 @@ class _MainLayoutState extends State<MainLayout> {
   // late int _myScore=0;
   // late int _myStreak=0;
 
-  late List<FriendProfile> _friendsList;
 
   // ================= 📊 分析模組狀態 =================
   late UserStats _userStats;
@@ -88,30 +87,6 @@ class _MainLayoutState extends State<MainLayout> {
       ],
     );
 
-    // 初始化好友名單
-    _friendsList = [
-      // FriendProfile(
-      //   uid: 'user_01',
-      //   displayName: 'Alex Carter',
-      //   score: 92,
-      //   shareId: 'HEALTHY88',
-      //   achievementsCount: 24,
-      // ),
-      // FriendProfile(
-      //   uid: 'user_02',
-      //   displayName: 'Sarah Jenkins',
-      //   score: 75,
-      //   shareId: 'FITSCOUT',
-      //   achievementsCount: 8,
-      // ),
-      // FriendProfile(
-      //   uid: 'user_03',
-      //   displayName: 'Emma Watson',
-      //   score: 58,
-      //   shareId: 'AVOCADO22',
-      //   achievementsCount: 3,
-      // ),
-    ];
 
     // 初始化 Analysis 頁面的每日營養目標
     final goals = Nutrients(
@@ -194,26 +169,6 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
-  void _handleOnAddFriend(String incomingId) {
-    setState(() {
-      _friendsList.add(
-        FriendProfile(
-          uid: 'user_${DateTime.now().millisecondsSinceEpoch}',
-          displayName: 'Scout $incomingId',
-          score: 70,
-          shareId: incomingId,
-          achievementsCount: 1,
-        ),
-      );
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Successfully connected with #$incomingId !'),
-        backgroundColor: const Color(0xFF059669),
-      ),
-    );
-  }
 
   void _openRecordDialog() {
     showModalBottomSheet<void>(
@@ -294,35 +249,25 @@ class _MainLayoutState extends State<MainLayout> {
     );
 
     // 注入社交排行視圖
-    displayPages[3] = SocialView(
-      userShareId: firebaseProvider.userProfile?['shareId'] ?? 'UNKNOWN',
-      //friends: _friendsList,
-      friends: List<dynamic>.from(
-  firebaseProvider.userProfile?['friends'] as List? ?? [],
-).whereType<Map>().map<FriendProfile>((f) {
-  return FriendProfile(
-    uid: f['uid']?.toString() ?? '',
-    displayName: f['displayName']?.toString() ?? 'Wise User',
-    photoURL: f['photoURL']?.toString(),
-    score: (f['score'] as num?)?.toInt() ?? 0,
-    shareId: f['shareId']?.toString() ?? '',
-    achievementsCount:
-        (f['achievementsCount'] as num?)?.toInt() ?? 0,
-  );
-}).toList(),
-      // userScore: score,
-      // userStreak: streak,
-      //onAddFriend: _handleOnAddFriend,
-      onAddFriend: (shareId) async {
-        await firebaseProvider.addFriendByShareId(shareId);
+ displayPages[3] = SocialView(
+  userShareId:
+      firebaseProvider.userProfile?['shareId']?.toString() ?? 'UNKNOWN',
+  friends: firebaseProvider.friends,
+  onAddFriend: (String shareId) async {
+    await firebaseProvider.addFriendByShareId(shareId);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added friend: $shareId')),
-          );
-        }
-      },
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('好友新增成功'),
+        backgroundColor: Color(0xFF059669),
+      ),
     );
+  },
+);
 
     // Profile streak 也改用 Firebase 餐點紀錄
     displayPages[4] = ProfileView(records: firebaseRecords);
